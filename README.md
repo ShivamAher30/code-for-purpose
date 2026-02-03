@@ -97,8 +97,8 @@ Experience the project in action:
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/NotShrirang/Multirag.git
-   cd Multirag
+   git clone https://github.com/safalsingh1/MultiRAG.git
+   cd MultiRAG
    ```
 
 2. Create a virtual environment and install dependencies:
