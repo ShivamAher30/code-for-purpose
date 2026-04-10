@@ -1,0 +1,5 @@
+{
+  "Profit Margin": "Calculated as total profit divided by total revenue.",
+  "Net Revenue": "Gross revenue minus any applicable taxes or returns.",
+  "Active Users": "Count of unique users whose last login date is within the trailing 30 days."
+}

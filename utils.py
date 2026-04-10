@@ -68,4 +68,4 @@ def get_local_files(directory: str, extensions: list = None, get_details: bool =
                     })
             return filtered_files
         else:
-            return [file for file in files if file.endswith(extensions(extensions))]
+            return [file for file in files if file.split(".")[-1] in extensions]

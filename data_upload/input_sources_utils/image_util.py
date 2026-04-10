@@ -30,13 +30,19 @@ def upload_image(clip_model, preprocess):
     st.subheader("Add Image to Database")
     images = st.file_uploader("Upload Image", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
     if images:
+        num_images_to_show = min(len(images), 4)
         cols = st.columns(5, vertical_alignment="center")
-        for count, image in enumerate(images[:4]):
+        for count in range(num_images_to_show):
             with cols[count]:
-                st.image(image)
-        with cols[4]:
-            if len(images) > 5:
-                st.info(f"and more {len(images) - 5} images...")
+                st.image(images[count])
+        
+        if len(images) > 4:
+            with cols[4]:
+                if len(images) == 5:
+                    st.image(images[4])
+                else:
+                    st.info(f"and {len(images) - 4} more images...")
+                    
         st.info(f"Total {len(images)} files selected.")
         if st.button("Add Images"):
             progress_bar = st.progress(0)

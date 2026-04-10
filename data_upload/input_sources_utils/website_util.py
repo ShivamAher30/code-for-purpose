@@ -50,7 +50,14 @@ def data_from_website(clip_model, preprocess, text_embedding_model):
                 progress_bar.empty()
 
             main_content = soup.find('main')
-            sample_text = main_content.text.strip().replace(r'\n', '')
+            if main_content:
+                text_content = main_content.get_text(separator=' ', strip=True)
+            elif soup.body:
+                text_content = soup.body.get_text(separator=' ', strip=True)
+            else:
+                text_content = soup.get_text(separator=' ', strip=True)
+
+            sample_text = text_content.replace(r'\n', ' ')
             with st.spinner("Processing Text..."):
-                text_util.process_text(main_content.text, text_embedding_model)
+                text_util.process_text(text_content, text_embedding_model)
             st.success("Data Added to Database")

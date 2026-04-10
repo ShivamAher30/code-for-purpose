@@ -29,12 +29,17 @@ def update_vectordb(index_path: str, embedding: torch.Tensor, image_path: str = 
             index = faiss.IndexFlatL2(384)
     else:
         index = faiss.read_index(f"./vectorstore/{index_path}")
-    try:
-        index.add(embedding.cpu().numpy())
-    except:
-        if len(embedding.shape) == 1:
-            embedding = torch.Tensor([embedding])
-        index.add(embedding)
+    import numpy as np
+    
+    if isinstance(embedding, torch.Tensor):
+        embedding_np = embedding.cpu().numpy().astype('float32')
+    else:
+        embedding_np = np.array(embedding).astype('float32')
+        
+    if len(embedding_np.shape) == 1:
+        embedding_np = embedding_np.reshape(1, -1)
+        
+    index.add(embedding_np)
     faiss.write_index(index, f'./vectorstore/{index_path}')
     if image_path:
         if not os.path.exists("./vectorstore/image_data.csv"):
@@ -89,6 +94,7 @@ def add_image_to_index(image, model: clip.model.CLIP, preprocess):
     with torch.no_grad():
         image = preprocess(image).unsqueeze(0).to(device)
         image_features = model.encode_image(image)
+        image_features /= image_features.norm(dim=-1, keepdim=True)
         index = update_vectordb(index_path="image_index.index", embedding=image_features, image_path=f"./images/{image_name}")
         return index
 
@@ -174,7 +180,10 @@ def search_image_index_with_image(image_features, index: faiss.IndexFlatL2, clip
 
 
 def search_text_index_with_image(text_embeddings, index: faiss.IndexFlatL2, text_embedding_model: SentenceTransformer, k: int = 3):
-    distances, indices = index.search(text_embeddings, k)
+    text_embeddings_np = text_embeddings.cpu().numpy()
+    if len(text_embeddings_np.shape) == 1:
+        text_embeddings_np = text_embeddings_np.reshape(1, -1)
+    distances, indices = index.search(text_embeddings_np, k)
     return indices
 
 
@@ -182,10 +191,15 @@ def search_image_index(text_input: str, index: faiss.IndexFlatL2, clip_model: cl
     with torch.no_grad():
         text = clip.tokenize([text_input]).to(device)
         text_features = clip_model.encode_text(text)
-        distances, indices = index.search(text_features.cpu().numpy(), k)
+        text_features /= text_features.norm(dim=-1, keepdim=True)
+        text_features_np = text_features.cpu().numpy().astype('float32')
+        distances, indices = index.search(text_features_np, k)
         return indices
 
 def search_text_index(text_input: str, index: faiss.IndexFlatL2, text_embedding_model: SentenceTransformer, k: int = 3):
     text_embeddings = text_embedding_model.encode([text_input])
-    distances, indices = index.search(text_embeddings, k)
+    text_embeddings_np = text_embeddings.cpu().numpy() if isinstance(text_embeddings, torch.Tensor) else text_embeddings
+    if len(text_embeddings_np.shape) == 1:
+        text_embeddings_np = text_embeddings_np.reshape(1, -1)
+    distances, indices = index.search(text_embeddings_np, k)
     return indices
