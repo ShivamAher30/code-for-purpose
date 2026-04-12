@@ -1,0 +1,431 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@theme {
+  /* ── Surface Hierarchy (Stitch: Indigo Slate Pro) ── */
+  --color-base: #0b1326;
+  --color-surface: #0b1326;
+  --color-surfaceDim: #0b1326;
+  --color-surfaceLowest: #060e20;
+  --color-surfaceLow: #131b2e;
+  --color-surfaceContainer: #171f33;
+  --color-surfaceHigh: #222a3d;
+  --color-surfaceHighest: #2d3449;
+  --color-surfaceBright: #31394d;
+
+  /* ── Accent Colors ── */
+  --color-primary: #818cf8;
+  --color-primarySoft: #bdc2ff;
+  --color-primaryDim: #e0e0ff;
+  --color-primaryContainer: #7c87f3;
+  --color-secondary: #64748b;
+  --color-secondaryContainer: #3a4a5f;
+  --color-tertiary: #a78bfa;
+  --color-tertiaryContainer: #9b7fed;
+  --color-tertiarySoft: #cebdff;
+
+  /* ── Semantic Colors ── */
+  --color-success: #34d399;
+  --color-successDim: #065f46;
+  --color-warning: #fbbf24;
+  --color-error: #f87171;
+  --color-errorContainer: #93000a;
+  --color-info: #60a5fa;
+
+  /* ── Text Colors (no pure white) ── */
+  --color-textMain: #dae2fd;
+  --color-textMuted: #c7c4d7;
+  --color-textDim: #908fa0;
+  --color-outline: #464554;
+  --color-outlineVariant: #464554;
+
+  /* ── On Colors ── */
+  --color-onPrimary: #131e8c;
+  --color-onPrimaryContainer: #081486;
+  --color-onSecondary: #213145;
+  --color-onSurface: #dae2fd;
+  --color-onSurfaceVariant: #c7c4d7;
+
+  /* ── Typography ── */
+  --font-display: "Inter", sans-serif;
+  --font-body: "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+/* ── Base Resets ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #0b1326;
+  color: #dae2fd;
+  font-family: "Inter", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Inter", sans-serif;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+/* ── Scrollbar (Minimal, invisible-ish) ── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(70, 69, 84, 0.35);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(70, 69, 84, 0.6);
+}
+
+/* ── Animations ── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes orbFloat {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-6px) scale(1.02); }
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes dotPulse {
+  0%, 80%, 100% { transform: scale(0); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+@keyframes subtlePulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.animate-fade-in {
+  animation: fadeIn 0.35s ease-out forwards;
+}
+.animate-slide-left {
+  animation: slideInLeft 0.35s ease-out forwards;
+}
+.animate-orb-float {
+  animation: orbFloat 5s ease-in-out infinite;
+}
+
+/* ── Loading Dots ── */
+.loading-dots {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.loading-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #7c87f3;
+  animation: dotPulse 1.4s infinite ease-in-out both;
+}
+.loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+.loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+.loading-dots span:nth-child(3) { animation-delay: 0s; }
+
+/* ── Gradient Text ── */
+.gradient-text {
+  background: linear-gradient(135deg, #818cf8 0%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Shimmer Loading ── */
+.shimmer {
+  background: linear-gradient(90deg, #171f33 25%, #222a3d 50%, #171f33 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ── Sidebar Separator (tonal shift, not a line) ── */
+.sidebar-section {
+  position: relative;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+}
+.sidebar-section::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(70,69,84,0.2) 30%, rgba(70,69,84,0.2) 70%, transparent 100%);
+}
+
+/* ── Markdown Prose Styling ── */
+.prose-ai p { margin-bottom: 0.5em; line-height: 1.7; }
+.prose-ai strong { color: #bdc2ff; font-weight: 600; }
+.prose-ai em { color: #cebdff; font-style: normal; }
+.prose-ai ul, .prose-ai ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+.prose-ai li {
+  margin-bottom: 0.35em;
+  line-height: 1.65;
+  color: #c7c4d7;
+}
+.prose-ai li::marker {
+  color: #7c87f3;
+}
+.prose-ai code {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.82em;
+  background: #171f33;
+  padding: 0.15em 0.45em;
+  border-radius: 5px;
+  color: #cebdff;
+  border: 1px solid rgba(70,69,84,0.2);
+}
+.prose-ai pre {
+  background: #0b1326;
+  border: 1px solid rgba(70,69,84,0.15);
+  border-radius: 10px;
+  padding: 1em;
+  overflow-x: auto;
+  margin: 0.75em 0;
+}
+.prose-ai pre code {
+  background: none;
+  padding: 0;
+  border: none;
+}
+.prose-ai h1, .prose-ai h2, .prose-ai h3 {
+  color: #bdc2ff;
+  margin-top: 1em;
+  margin-bottom: 0.4em;
+  font-weight: 600;
+}
+.prose-ai a {
+  color: #818cf8;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(129,140,248,0.3);
+}
+.prose-ai a:hover {
+  text-decoration-color: rgba(129,140,248,0.7);
+}
+
+/* ── Custom Recharts Tooltip ── */
+.custom-tooltip {
+  background: rgba(23,31,51,0.95) !important;
+  border: 1px solid rgba(70,69,84,0.25) !important;
+  border-radius: 10px !important;
+  padding: 10px 14px !important;
+  box-shadow: 0 16px 40px -10px rgba(6,14,32,0.6) !important;
+  backdrop-filter: blur(16px);
+}
+.custom-tooltip .label {
+  color: #dae2fd;
+  font-weight: 600;
+  font-size: 0.75rem;
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+.custom-tooltip .value {
+  color: #c7c4d7;
+  font-size: 0.75rem;
+}
+
+/* ── Upload Zone ── */
+.upload-zone {
+  background: #131b2e;
+  border: 1px dashed rgba(70,69,84,0.3);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.upload-zone:hover {
+  border-color: rgba(129,140,248,0.3);
+  background: linear-gradient(180deg, rgba(129,140,248,0.03) 0%, #131b2e 100%);
+}
+.upload-zone.drag-over {
+  border-color: rgba(129,140,248,0.5);
+  background: linear-gradient(180deg, rgba(129,140,248,0.06) 0%, #131b2e 100%);
+  transform: scale(1.005);
+}
+
+/* ── Badge Pill ── */
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  border: 1px solid;
+}
+
+/* ── Chat Bubbles ── */
+.chat-bubble-user {
+  background: #222a3d;
+  border-radius: 16px 16px 4px 16px;
+}
+.chat-bubble-ai {
+  background: #171f33;
+  border-radius: 16px 16px 16px 4px;
+}
+
+/* ── Input Bar ── */
+.input-bar {
+  background: rgba(23,31,51,0.85);
+  border: 1px solid rgba(70,69,84,0.2);
+  border-radius: 16px;
+  backdrop-filter: blur(24px) saturate(1.3);
+  box-shadow: 0 -4px 40px rgba(6,14,32,0.5);
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.input-bar:focus-within {
+  border-color: rgba(129,140,248,0.25);
+  box-shadow: 0 -4px 40px rgba(6,14,32,0.5), 0 0 0 1px rgba(129,140,248,0.08);
+}
+
+/* ── Stat Card ── */
+.stat-card {
+  background: #222a3d;
+  border-radius: 10px;
+  padding: 10px;
+  text-align: center;
+  transition: all 0.2s;
+}
+.stat-card:hover {
+  background: #2d3449;
+}
+
+/* ── Quick Action Button ── */
+.quick-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  background: #222a3d;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  color: #c7c4d7;
+}
+.quick-action-btn:hover:not(:disabled) {
+  background: #2d3449;
+  color: #dae2fd;
+}
+.quick-action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ── RAG File Chip ── */
+.rag-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  background: #222a3d;
+  color: #c7c4d7;
+  transition: background 0.2s;
+}
+.rag-chip:hover {
+  background: #2d3449;
+}
+
+/* ── Chart Container ── */
+.chart-container {
+  background: #131b2e;
+  border-radius: 14px;
+  padding: 20px;
+  overflow: hidden;
+}
+
+/* ── Welcome Hero ── */
+.welcome-orb {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(129,140,248,0.12) 0%, rgba(167,139,250,0.12) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Suggestion Chip ── */
+.suggestion-chip {
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #c7c4d7;
+  background: #171f33;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1.4;
+}
+.suggestion-chip:hover:not(:disabled) {
+  background: #222a3d;
+  color: #dae2fd;
+}
+.suggestion-chip:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ── File type icons ── */
+.file-type-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* ── Number formatting helper class ── */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}

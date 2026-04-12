@@ -83,8 +83,23 @@ def execute_pandas_code_safely(code: str, df: pd.DataFrame):
     Blocks any string with imports, os, sys, direct evals, dunders, etc.
     """
     # 1. Reject fundamentally unsafe patterns
-    unsafe_patterns = ["import", "os", "sys", "eval", "exec", "__", "open", "read", "write"]
-    for pattern in unsafe_patterns:
+    # Use word-boundary regex to avoid false positives on column names like "cost", "gross", "Boston"
+    # Patterns that need word-boundary matching (short words that appear inside other words)
+    word_boundary_patterns = ["os", "sys", "eval", "exec", "open"]
+    for pattern in word_boundary_patterns:
+        if re.search(r'(?<!\w)' + pattern + r'\s*[\.\(\[]', code):
+            raise ValueError(f"Security Alert: Unsafe operation detected ({pattern}). Blocked execution.")
+        # Also check for standalone usage like `import os`
+        if re.search(r'(?<!\w)' + pattern + r'(?!\w)', code) and pattern not in [w for w in code.split("'") + code.split('"')]:
+            # Only block if it's not inside a string literal (column name, etc.)
+            # Check if the match is outside quotes
+            clean_code = re.sub(r'(["\']).*?\1', '', code)  # Remove string literals
+            if re.search(r'(?<!\w)' + pattern + r'(?!\w)', clean_code):
+                raise ValueError(f"Security Alert: Unsafe operation detected ({pattern}). Blocked execution.")
+
+    # Substring patterns that are unambiguous (won't appear in normal column names)
+    substring_patterns = ["import ", "__", "subprocess", "shutil", "pathlib"]
+    for pattern in substring_patterns:
         if pattern in code:
             raise ValueError(f"Security Alert: Unsafe operation detected ({pattern}). Blocked execution.")
             
