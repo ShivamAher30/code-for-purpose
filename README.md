@@ -11,20 +11,36 @@ A conversational analytics platform that enables natural language interaction wi
 Upload a dataset and start asking questions in plain English. The system interprets your query, generates Pandas code under the hood, and returns interactive charts, data tables, and AI-generated narrative insights — all in real time.
 
 <p align="center">
-  <img src="https://res.cloudinary.com/dzmz31gui/video/upload/f_gif,q_auto/v1776019227/ogvideo_oltqmu.mp4" alt="Conversational Data Analysis Demo" />
+  <a href="https://res.cloudinary.com/dzmz31gui/video/upload/v1776019227/ogvideo_oltqmu.mp4">
+    <img src="https://res.cloudinary.com/dzmz31gui/video/upload/w_800,so_0/v1776019227/ogvideo_oltqmu.jpg" alt="Conversational Data Analysis Demo" width="800" />
+    <br />
+    <strong>▶️ Click to play demo</strong>
+  </a>
 </p>
 
 ### PDF Export of Chat History
 
 Export your entire analysis session — including queries, responses, charts, and data tables — as a professionally formatted PDF report. Ideal for sharing findings with stakeholders or archiving analysis workflows.
 
-https://res.cloudinary.com/dzmz31gui/video/upload/v1776019545/cfpfinak_ofdhcc.mp4
+<p align="center">
+  <a href="https://res.cloudinary.com/dzmz31gui/video/upload/v1776019545/cfpfinak_ofdhcc.mp4">
+    <img src="https://res.cloudinary.com/dzmz31gui/video/upload/w_800,so_0/v1776019545/cfpfinak_ofdhcc.jpg" alt="PDF Export Demo" width="800" />
+    <br />
+    <strong>▶️ Click to play demo</strong>
+  </a>
+</p>
 
 ### PDF RAG Retrieval
 
 Upload PDF documents and query them using natural language. The system extracts text and images, chunks and indexes them into a FAISS vector store, and performs semantic search to retrieve the most relevant context — enabling accurate, citation-backed answers from unstructured documents.
 
-https://res.cloudinary.com/dzmz31gui/video/upload/v1776019151/pdffile_xgce5t.mp4
+<p align="center">
+  <a href="https://res.cloudinary.com/dzmz31gui/video/upload/v1776019151/pdffile_xgce5t.mp4">
+    <img src="https://res.cloudinary.com/dzmz31gui/video/upload/w_800,so_0/v1776019151/pdffile_xgce5t.jpg" alt="PDF RAG Retrieval Demo" width="800" />
+    <br />
+    <strong>▶️ Click to play demo</strong>
+  </a>
+</p>
 
 ---
 
