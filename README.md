@@ -11,30 +11,20 @@ A conversational analytics platform that enables natural language interaction wi
 Upload a dataset and start asking questions in plain English. The system interprets your query, generates Pandas code under the hood, and returns interactive charts, data tables, and AI-generated narrative insights — all in real time.
 
 <p align="center">
-  <video src="https://github.com/ShivamAher30/GIF-DUMP/raw/main/ogvideo.mp4" width="800" controls>
-    Your browser does not support the video tag.
-  </video>
+  <img src="https://res.cloudinary.com/dzmz31gui/video/upload/f_gif,q_auto/v1776019227/ogvideo_oltqmu.mp4" alt="Conversational Data Analysis Demo" />
 </p>
 
 ### PDF Export of Chat History
 
 Export your entire analysis session — including queries, responses, charts, and data tables — as a professionally formatted PDF report. Ideal for sharing findings with stakeholders or archiving analysis workflows.
 
-<p align="center">
-  <video src="https://github.com/ShivamAher30/GIF-DUMP/raw/main/2minvideo.mp4" width="800" controls>
-    Your browser does not support the video tag.
-  </video>
-</p>
+https://res.cloudinary.com/dzmz31gui/video/upload/v1776019545/cfpfinak_ofdhcc.mp4
 
 ### PDF RAG Retrieval
 
 Upload PDF documents and query them using natural language. The system extracts text and images, chunks and indexes them into a FAISS vector store, and performs semantic search to retrieve the most relevant context — enabling accurate, citation-backed answers from unstructured documents.
 
-<p align="center">
-  <video src="https://github.com/ShivamAher30/GIF-DUMP/raw/main/pdffile.mp4" width="800" controls>
-    Your browser does not support the video tag.
-  </video>
-</p>
+https://res.cloudinary.com/dzmz31gui/video/upload/v1776019151/pdffile_xgce5t.mp4
 
 ---
 
