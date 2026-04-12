@@ -1045,6 +1045,7 @@ async def process_query(req: QueryRequest):
         # ── RAG ──
         else:
             context_chunks = []
+            image_results = []
             if has_rag_text:
                 try:
                     ti, td = load_text_index()
@@ -1063,13 +1064,54 @@ async def process_query(req: QueryRequest):
                             context_chunks.append(ad['content'].iloc[idx])
                 except Exception:
                     pass
+            if has_rag_image:
+                try:
+                    ii, id_df = load_image_index()
+                    res_idxs = search_image_index(query, ii, clip_model, k=3)
+                    for idx in res_idxs[0]:
+                        if 0 <= idx < len(id_df):
+                            img_path = id_df['path'].iloc[idx]
+                            image_results.append(img_path)
+                except Exception:
+                    pass
 
-            if not context_chunks:
+            if not context_chunks and not image_results:
                 result["response"] = "I couldn't find relevant information. Try uploading more data or rephrasing."
             else:
                 combined_context = " ".join(context_chunks)[:1500]
-                prompt = f"Answer the question based on the context below.\n\nContext: {combined_context}\n\nQuestion: {query}\n\nAnswer:"
-                result["response"] = call_llm(prompt)
+                
+                # Analyze top image if available to act as OCR/QA
+                vision_response = None
+                if image_results:
+                    top_image_path = image_results[0]
+                    try:
+                        with open(top_image_path, "rb") as f:
+                            image_bytes = f.read()
+                        vision_response = analyze_vision_chart(query, image_bytes)
+                    except Exception as e:
+                        print(f"Vision error: {e}")
+
+                if image_results:
+                    result["trust_layer"]["image_results"] = [
+                        {"path": p, "url": f"/files/images/{os.path.basename(p)}"}
+                        for p in image_results
+                    ]
+
+                if combined_context.strip():
+                    prompt = f"Answer the question based on the context below.\n\nContext: {combined_context}\n\nQuestion: {query}\n\nAnswer:"
+                    text_response = call_llm(prompt)
+                    
+                    if vision_response:
+                        result["response"] = f"{text_response}\n\n---\n**Image Analysis ({os.path.basename(image_results[0])}):**\n{vision_response}"
+                    else:
+                        result["response"] = text_response
+                elif vision_response:
+                    result["response"] = f"**Image Analysis ({os.path.basename(image_results[0])}):**\n{vision_response}"
+                elif image_results:
+                    result["response"] = f"I found {len(image_results)} relevant image(s) matching your query: " + ", ".join(
+                        os.path.basename(p) for p in image_results
+                    )
+                
                 result["trust_layer"]["sources"] = context_chunks
                 result["trust_layer"]["explanation"] = "Retrieved from vector database via semantic search."
 
@@ -1220,7 +1262,7 @@ def clear_chat():
 
 @app.post("/api/clear-rag")
 def clear_rag_data():
-    """Clear all RAG vector indices, metadata, and uploaded files."""
+    """Clear all RAG vector indices, metadata, uploaded files, and associated memory."""
     removed = {"indices": [], "metadata": [], "audio": 0, "images": 0}
 
     # Remove FAISS indices and metadata CSVs
@@ -1260,6 +1302,11 @@ def clear_rag_data():
                 removed["images"] += 1
             except Exception:
                 pass
+
+    # Clear conversation history and query cache so the LLM doesn't
+    # reference stale RAG context from previous answers.
+    state["messages"] = []
+    state["query_cache"] = {}
 
     return {"success": True, "removed": removed}
 

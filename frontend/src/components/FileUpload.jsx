@@ -8,7 +8,6 @@ const FILE_CATEGORIES = {
   data: { exts: ['.csv', '.xlsx', '.xls'], label: 'Data', icon: FileSpreadsheet, color: '#818cf8' },
   audio: { exts: ['.mp3', '.wav', '.m4a', '.ogg', '.webm'], label: 'Audio', icon: FileAudio, color: '#a78bfa' },
   pdf: { exts: ['.pdf'], label: 'PDF', icon: FileText, color: '#f87171' },
-  image: { exts: ['.jpg', '.jpeg', '.png', '.gif', '.webp'], label: 'Image', icon: FileImage, color: '#67e8f9' },
   text: { exts: ['.txt', '.md', '.log'], label: 'Text', icon: File, color: '#34d399' },
 };
 

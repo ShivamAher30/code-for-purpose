@@ -274,9 +274,11 @@ export default function App() {
       const files = await getRagFiles();
       setRagFiles(files);
       setRagResults([]);
-      setMessages(prev => [...prev, {
+      // Clear all messages for a fully clean slate — backend also wipes
+      // its conversation history and query cache on clear-rag.
+      setMessages([{
         role: 'assistant',
-        content: '**Knowledge base cleared.** All previously uploaded PDFs, audio, images, and text indices have been removed. You can now upload new files for a fresh context.',
+        content: '**Knowledge base cleared.** All previously uploaded PDFs, audio, images, and text indices have been removed. Conversation history has been reset. You can now upload new files for a fresh context.',
         intent: 'rag',
       }]);
     } catch (err) {
