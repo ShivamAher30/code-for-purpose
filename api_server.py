@@ -532,7 +532,8 @@ def _build_chart_data_for_suggestion(df, suggestion, aggregation="sum", sort_by=
 
         # ── Heatmap ──
         elif chart_type == "heatmap":
-            corr_data, _ = _compute_correlations(filtered_df)
+            corr_df = filtered_df[columns] if columns else filtered_df
+            corr_data, _ = _compute_correlations(corr_df)
             if corr_data:
                 return corr_data["matrix"], "heatmap", corr_data["columns"]
             return None, None, None

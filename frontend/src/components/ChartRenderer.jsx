@@ -206,6 +206,9 @@ const brushDefaults = {
 };
 
 export default function ChartRenderer({ data, chartType, chartKeys, title }) {
+  const [hoveredCell, setHoveredCell] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
   if (!data || data.length === 0) return null;
 
   const keys = chartKeys || Object.keys(data[0]).filter(
@@ -302,82 +305,97 @@ export default function ChartRenderer({ data, chartType, chartKeys, title }) {
   if (chartType === 'heatmap') {
     const heatCols = chartKeys || [...new Set(data.map(d => d.x))];
     const cellSize = Math.max(28, Math.min(48, 400 / heatCols.length));
-    const size = heatCols.length * cellSize + 80;
+    const size = heatCols.length * cellSize + 120; // Increased padding for labels
 
     return (
-      <ChartWrapper title={title} height={Math.min(size + 60, 500)}>
-        <svg width="100%" height="100%" viewBox={`0 0 ${size + 20} ${size}`} style={{ overflow: 'visible' }}>
-          {/* Column labels (top) */}
-          {heatCols.map((col, i) => (
-            <text
-              key={`xt-${col}`}
-              x={80 + i * cellSize + cellSize / 2}
-              y={12}
-              textAnchor="end"
-              transform={`rotate(-45, ${80 + i * cellSize + cellSize / 2}, 12)`}
-              fill={DARK.text}
-              fontSize={9}
-              fontFamily="Inter"
-            >
-              {truncateLabel(col, 10)}
-            </text>
-          ))}
-          {/* Row labels (left) */}
-          {heatCols.map((col, j) => (
-            <text
-              key={`yt-${col}`}
-              x={76}
-              y={35 + j * cellSize + cellSize / 2 + 4}
-              textAnchor="end"
-              fill={DARK.text}
-              fontSize={9}
-              fontFamily="Inter"
-            >
-              {truncateLabel(col, 10)}
-            </text>
-          ))}
-          {/* Cells */}
-          {data.map((cell, idx) => {
-            const xi = heatCols.indexOf(cell.x);
-            const yi = heatCols.indexOf(cell.y);
-            if (xi === -1 || yi === -1) return null;
-            const v = cell.value;
-            const color = v > 0
-              ? `rgba(52, 211, 153, ${Math.min(Math.abs(v), 1) * 0.8 + 0.1})`
-              : v < 0
-              ? `rgba(248, 113, 113, ${Math.min(Math.abs(v), 1) * 0.8 + 0.1})`
-              : 'rgba(70,69,84,0.15)';
+      <ChartWrapper title={title} height={Math.min(size + 80, 500)}>
+        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+          <svg width="100%" height="100%" viewBox={`0 0 ${size + 20} ${size + 20}`} style={{ overflow: 'visible' }}>
+            {/* Column labels (top) */}
+            {heatCols.map((col, i) => (
+              <text
+                key={`xt-${col}`}
+                x={120 + i * cellSize + cellSize / 2}
+                y={60}
+                textAnchor="end"
+                transform={`rotate(-45, ${120 + i * cellSize + cellSize / 2}, 60)`}
+                fill={DARK.text}
+                fontSize={9}
+                fontFamily="Inter"
+              >
+                {truncateLabel(col, 10)}
+              </text>
+            ))}
+            {/* Row labels (left) */}
+            {heatCols.map((col, j) => (
+              <text
+                key={`yt-${col}`}
+                x={116}
+                y={80 + j * cellSize + cellSize / 2 + 4}
+                textAnchor="end"
+                fill={DARK.text}
+                fontSize={9}
+                fontFamily="Inter"
+              >
+                {truncateLabel(col, 10)}
+              </text>
+            ))}
+            {/* Cells */}
+            {data.map((cell, idx) => {
+              const xi = heatCols.indexOf(cell.x);
+              const yi = heatCols.indexOf(cell.y);
+              if (xi === -1 || yi === -1) return null;
+              const v = cell.value;
+              const color = v > 0
+                ? `rgba(52, 211, 153, ${Math.min(Math.abs(v), 1) * 0.8 + 0.1})`
+                : v < 0
+                ? `rgba(248, 113, 113, ${Math.min(Math.abs(v), 1) * 0.8 + 0.1})`
+                : 'rgba(70,69,84,0.15)';
 
-            return (
-              <g key={idx}>
-                <rect
-                  x={80 + xi * cellSize + 1}
-                  y={35 + yi * cellSize + 1}
-                  width={cellSize - 2}
-                  height={cellSize - 2}
-                  rx={4}
-                  fill={color}
-                  style={{ transition: 'fill 0.2s' }}
-                >
-                  <title>{`${cell.x} × ${cell.y}: ${v.toFixed(3)}`}</title>
-                </rect>
-                {cellSize >= 32 && (
-                  <text
-                    x={80 + xi * cellSize + cellSize / 2}
-                    y={35 + yi * cellSize + cellSize / 2 + 4}
-                    textAnchor="middle"
-                    fill={Math.abs(v) > 0.4 ? '#fff' : DARK.text}
-                    fontSize={8}
-                    fontWeight={500}
-                    fontFamily="Inter"
+              return (
+                <g key={idx}>
+                  <rect
+                    x={120 + xi * cellSize + 1}
+                    y={80 + yi * cellSize + 1}
+                    width={cellSize - 2}
+                    height={cellSize - 2}
+                    rx={4}
+                    fill={color}
+                    style={{ transition: 'fill 0.2s', cursor: 'pointer' }}
+                    onMouseEnter={(e) => {
+                      setHoveredCell(cell);
+                      setTooltipPos({ x: e.clientX, y: e.clientY });
+                    }}
+                    onMouseMove={(e) => {
+                      setTooltipPos({ x: e.clientX, y: e.clientY });
+                    }}
+                    onMouseLeave={() => setHoveredCell(null)}
                   >
-                    {v.toFixed(2)}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-        </svg>
+                  </rect>
+                  {cellSize >= 32 && (
+                    <text
+                      x={120 + xi * cellSize + cellSize / 2}
+                      y={80 + yi * cellSize + cellSize / 2 + 4}
+                      textAnchor="middle"
+                      fill={Math.abs(v) > 0.4 ? '#fff' : DARK.text}
+                      fontSize={8}
+                      fontWeight={500}
+                      fontFamily="Inter"
+                      pointerEvents="none"
+                    >
+                      {v.toFixed(2)}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+          {hoveredCell && (
+            <div style={{ position: 'fixed', left: tooltipPos.x + 15, top: tooltipPos.y + 15, pointerEvents: 'none', zIndex: 1000 }}>
+              <HeatmapTooltip active={true} payload={[{ payload: hoveredCell }]} />
+            </div>
+          )}
+        </div>
       </ChartWrapper>
     );
   }
