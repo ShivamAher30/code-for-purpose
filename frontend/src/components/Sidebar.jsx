@@ -238,7 +238,7 @@ export default function Sidebar({
       {/* ── Footer ── */}
       <div className="p-4 border-t border-outline/10">
         <p className="text-[9px] text-textDim text-center">
-          Powered by <span className="gradient-text font-semibold">Groq AI</span> • v2.1
+          Made for  <span className="gradient-text font-semibold">Code for Purpose </span> 
         </p>
       </div>
     </aside>

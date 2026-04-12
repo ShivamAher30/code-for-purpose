@@ -4,6 +4,26 @@ A conversational analytics platform that enables natural language interaction wi
 
 ---
 
+## Demo
+
+### Conversational Data Analysis
+
+Upload a dataset and start asking questions in plain English. The system interprets your query, generates Pandas code under the hood, and returns interactive charts, data tables, and AI-generated narrative insights — all in real time.
+
+<p align="center">
+  <img src="https://github.com/ShivamAher30/GIF-DUMP/blob/main/cfp2.gif?raw=true" alt="Conversational Data Analysis Demo" />
+</p>
+
+### PDF Export of Chat History
+
+Export your entire analysis session — including queries, responses, charts, and data tables — as a professionally formatted PDF report. Ideal for sharing findings with stakeholders or archiving analysis workflows.
+
+<p align="center">
+  <img src="https://github.com/ShivamAher30/GIF-DUMP/blob/main/cfpfinak.gif?raw=true" alt="PDF Export Demo" />
+</p>
+
+---
+
 ## Prerequisites
 
 - **Python** 3.10 or 3.11 (required for `faiss-cpu` compatibility)
