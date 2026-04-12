@@ -4,18 +4,135 @@ A conversational analytics platform that enables natural language interaction wi
 
 ---
 
+## Prerequisites
+
+- **Python** 3.10 or 3.11 (required for `faiss-cpu` compatibility)
+- **Node.js** 18+ and npm
+- **Groq API Key** -- Obtain from [console.groq.com](https://console.groq.com)
+- **GPU (optional)** -- CUDA-compatible GPU accelerates CLIP, Whisper, and embedding computations. The system falls back to CPU automatically.
+
+---
+
+## Installation
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/safalsingh1/talk-to-data-.git
+cd talk-to-data-
+```
+
+### 2. Backend Setup
+
+Create and activate a Python virtual environment:
+
+```bash
+# Windows
+python -m venv venv
+.\venv\Scripts\activate
+
+# macOS / Linux
+python3 -m venv venv
+source venv/bin/activate
+```
+
+Install Python dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+> **Note:** The `requirements.txt` includes `git+https://github.com/openai/CLIP.git` which requires Git to be available on your system PATH. If installation fails for CLIP, ensure Git is installed and accessible.
+
+### 3. Frontend Setup
+
+```bash
+cd frontend
+npm install
+cd ..
+```
+
+---
+
+## Configuration
+
+### Environment Variables
+
+Copy the example environment file and insert your credentials:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your Groq API key:
+
+```env
+GROQ_API_KEY=gsk_your_key_here
+```
+
+The backend loads this via `python-dotenv` at startup. No other environment variables are required for basic operation.
+
+### Semantic Dictionary (Optional)
+
+Define custom business metric formulas in `semantic_dict.json` at the project root. The LLM will use these exact definitions when users query the corresponding metrics:
+
+```json
+{
+  "gross_margin": "Gross Margin = (Revenue - COGS) / Revenue * 100",
+  "churn_rate": "Churn Rate = Customers Lost / Total Customers at Start of Period * 100"
+}
+```
+
+These definitions can also be managed via the API at runtime (`POST /api/metrics`).
+
+---
+
+## Running the Application
+
+### Start the Backend Server
+
+```bash
+# From the project root, with the virtual environment activated
+python api_server.py
+```
+
+The FastAPI server starts on `http://localhost:8000`. On first launch, the following models are loaded into memory:
+
+| Model | Size (approx.) | Purpose |
+|---|---|---|
+| CLIP ViT-B/32 | ~340 MB | Image embedding for RAG |
+| all-MiniLM-L6-v2 | ~80 MB | Text embedding for RAG |
+| Whisper small | ~460 MB | Audio transcription |
+
+Initial model download may take several minutes depending on network speed. Subsequent launches load from cache.
+
+### Start the Frontend Dev Server
+
+```bash
+cd frontend
+npm run dev
+```
+
+The Vite dev server starts on `http://localhost:5173` (default) with hot module replacement enabled. The frontend proxies API requests to `http://localhost:8000`.
+
+### Verify Connectivity
+
+Open `http://localhost:5173` in a browser. The header bar should display a green connection indicator. If it shows "Offline", confirm the backend is running and accessible on port 8000.
+
+---
+
 ## Table of Contents
 
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Running the Application](#running-the-application)
 - [Overview](#overview)
 - [Architecture](#architecture)
 - [System Architecture Diagram](#system-architecture-diagram)
 - [Processing Pipeline](#processing-pipeline)
 - [Module Reference](#module-reference)
 - [Tech Stack](#tech-stack)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Running the Application](#running-the-application)
 - [API Reference](#api-reference)
 - [Frontend Structure](#frontend-structure)
 - [Security Considerations](#security-considerations)
@@ -219,121 +336,6 @@ Manages three independent FAISS indices (`text_index.index`, `audio_index.index`
 | Build Tool | Vite with PostCSS + Autoprefixer |
 
 ---
-
-## Prerequisites
-
-- **Python** 3.10 or 3.11 (required for `faiss-cpu` compatibility)
-- **Node.js** 18+ and npm
-- **Groq API Key** -- Obtain from [console.groq.com](https://console.groq.com)
-- **GPU (optional)** -- CUDA-compatible GPU accelerates CLIP, Whisper, and embedding computations. The system falls back to CPU automatically.
-
----
-
-## Installation
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/safalsingh1/talk-to-data-.git
-cd talk-to-data-
-```
-
-### 2. Backend Setup
-
-Create and activate a Python virtual environment:
-
-```bash
-# Windows
-python -m venv venv
-.\venv\Scripts\activate
-
-# macOS / Linux
-python3 -m venv venv
-source venv/bin/activate
-```
-
-Install Python dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-> **Note:** The `requirements.txt` includes `git+https://github.com/openai/CLIP.git` which requires Git to be available on your system PATH. If installation fails for CLIP, ensure Git is installed and accessible.
-
-### 3. Frontend Setup
-
-```bash
-cd frontend
-npm install
-cd ..
-```
-
----
-
-## Configuration
-
-### Environment Variables
-
-Copy the example environment file and insert your credentials:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your Groq API key:
-
-```env
-GROQ_API_KEY=gsk_your_key_here
-```
-
-The backend loads this via `python-dotenv` at startup. No other environment variables are required for basic operation.
-
-### Semantic Dictionary (Optional)
-
-Define custom business metric formulas in `semantic_dict.json` at the project root. The LLM will use these exact definitions when users query the corresponding metrics:
-
-```json
-{
-  "gross_margin": "Gross Margin = (Revenue - COGS) / Revenue * 100",
-  "churn_rate": "Churn Rate = Customers Lost / Total Customers at Start of Period * 100"
-}
-```
-
-These definitions can also be managed via the API at runtime (`POST /api/metrics`).
-
----
-
-## Running the Application
-
-### Start the Backend Server
-
-```bash
-# From the project root, with the virtual environment activated
-python api_server.py
-```
-
-The FastAPI server starts on `http://localhost:8000`. On first launch, the following models are loaded into memory:
-
-| Model | Size (approx.) | Purpose |
-|---|---|---|
-| CLIP ViT-B/32 | ~340 MB | Image embedding for RAG |
-| all-MiniLM-L6-v2 | ~80 MB | Text embedding for RAG |
-| Whisper small | ~460 MB | Audio transcription |
-
-Initial model download may take several minutes depending on network speed. Subsequent launches load from cache.
-
-### Start the Frontend Dev Server
-
-```bash
-cd frontend
-npm run dev
-```
-
-The Vite dev server starts on `http://localhost:5173` (default) with hot module replacement enabled. The frontend proxies API requests to `http://localhost:8000`.
-
-### Verify Connectivity
-
-Open `http://localhost:5173` in a browser. The header bar should display a green connection indicator. If it shows "Offline", confirm the backend is running and accessible on port 8000.
 
 ---
 
