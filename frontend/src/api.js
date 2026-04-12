@@ -207,6 +207,36 @@ export async function togglePrivacy(enabled) {
   return res.json();
 }
 
+// ── Dataset Profiling ──
+export async function getDatasetProfile() {
+  const res = await fetch(`${API_BASE}/api/dataset-profile`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Profile failed' }));
+    throw new Error(err.detail || 'Profile failed');
+  }
+  return res.json();
+}
+
+// ── Render Chart from Suggestion ──
+export async function renderSuggestionChart(suggestionId, options = {}) {
+  const res = await fetch(`${API_BASE}/api/render-chart`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      suggestion_id: suggestionId,
+      aggregation: options.aggregation || null,
+      sort_by: options.sort_by || null,
+      filters: options.filters || null,
+      chart_type_override: options.chart_type_override || null,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Render failed' }));
+    throw new Error(err.detail || 'Render failed');
+  }
+  return res.json();
+}
+
 // ── Health Check ──
 export async function healthCheck() {
   try {

@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Send, MessageSquare, Activity, Sparkles, ArrowDown,
-  BarChart3, Mic, Paperclip,
+  BarChart3, Compass, MessageCircle,
 } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import ChatMessage from './components/ChatMessage';
+import DataExplorer from './components/DataExplorer';
 import {
   uploadFile, uploadAudio, uploadPDF, uploadImage, uploadText,
   sendQuery, quickAction, clearChat, clearRagData, healthCheck,
@@ -33,6 +34,7 @@ export default function App() {
   const [routingMode, setRoutingMode] = useState('Auto-Detect');
   const [backendStatus, setBackendStatus] = useState('checking');
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [activeTab, setActiveTab] = useState('explorer'); // 'explorer' | 'chat'
 
   const chatEndRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -90,6 +92,7 @@ export default function App() {
       setUploadResult({ rows: result.rows, columns: result.columns, filename: file.name });
       if (result.schema) setSchema(result.schema);
       setMessages([]);
+      setActiveTab('explorer'); // Switch to explorer after upload
     } catch (err) {
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -133,6 +136,7 @@ export default function App() {
 
       // Show success message in chat
       const typeLabel = { audio: 'Audio', pdf: 'PDF', image: 'Image', text: 'Text' };
+      setActiveTab('chat');
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: `**${typeLabel[category] || 'File'} processed successfully.**\n\n**File:** ${result.filename}${result.transcript_preview ? `\n**Preview:** ${result.transcript_preview}` : ''}${result.pages ? `\n**Pages:** ${result.pages}` : ''}${result.chunks_indexed ? `\n**Chunks indexed:** ${result.chunks_indexed}` : ''}${result.images_indexed ? `\n**Images indexed:** ${result.images_indexed}` : ''}\n\nYou can now ask questions about this content.`,
@@ -153,6 +157,9 @@ export default function App() {
   const handleSend = useCallback(async (overrideQuery) => {
     const q = overrideQuery || query.trim();
     if (!q || isProcessing) return;
+
+    // Switch to chat tab when sending a query
+    setActiveTab('chat');
 
     const userMsg = { role: 'user', content: q };
     const loadingMsg = { role: 'assistant', content: '', loading: true };
@@ -216,6 +223,7 @@ export default function App() {
   const handleQuickAction = useCallback(async (action) => {
     if (isProcessing) return;
 
+    setActiveTab('chat');
     const labels = { summary: 'Summary', anomaly: 'Anomaly Detection', insights: 'Insights' };
     const userMsg = { role: 'user', content: `Quick Action: ${labels[action] || action}` };
     const loadingMsg = { role: 'assistant', content: '', loading: true };
@@ -309,7 +317,7 @@ export default function App() {
 
   const hasData = !!schema;
   const hasRag = ragFiles && (ragFiles.has_text_index || ragFiles.has_audio_index || ragFiles.has_image_index);
-  const isEmpty = messages.length === 0;
+  const chatIsEmpty = messages.length === 0;
 
   return (
     <div className="flex h-screen overflow-hidden bg-base">
@@ -335,7 +343,7 @@ export default function App() {
       {/* ── Main Content ── */}
       <main className="flex-1 flex flex-col relative overflow-hidden bg-surfaceLow">
 
-        {/* Header Bar */}
+        {/* Header Bar with Tabs */}
         <header className="h-11 flex items-center justify-between px-6 bg-surfaceContainer/60 backdrop-blur-md shrink-0 z-10">
           <div className="flex items-center gap-3">
             <span className={`
@@ -361,6 +369,30 @@ export default function App() {
               </span>
             )}
           </div>
+
+          {/* Tab Switcher */}
+          {hasData && (
+            <div className="tab-switcher">
+              <button
+                onClick={() => setActiveTab('explorer')}
+                className={`tab-btn ${activeTab === 'explorer' ? 'active' : ''}`}
+              >
+                <Compass size={13} />
+                <span>Explorer</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('chat')}
+                className={`tab-btn ${activeTab === 'chat' ? 'active' : ''}`}
+              >
+                <MessageCircle size={13} />
+                <span>Chat</span>
+                {messages.length > 0 && (
+                  <span className="tab-badge">{messages.length}</span>
+                )}
+              </button>
+            </div>
+          )}
+
           <div className="flex items-center gap-3">
             {uploadResult && (
               <span className="text-[10px] text-textDim/50 bg-surfaceHigh/60 px-2.5 py-1 rounded-lg">
@@ -370,127 +402,138 @@ export default function App() {
           </div>
         </header>
 
-        {/* Chat Area */}
-        <div
-          ref={chatContainerRef}
-          onScroll={handleScroll}
-          className="flex-1 overflow-y-auto px-6 py-6 pb-40"
-        >
-          {isEmpty ? (
-            /* ── Welcome State ── */
-            <div className="flex flex-col items-center justify-center h-full max-w-xl mx-auto text-center animate-fade-in">
-              <div className="welcome-orb mb-6 animate-orb-float">
-                <Sparkles size={28} className="text-primary" />
-              </div>
-              <h2 className="font-display text-3xl font-bold text-textMain mb-3 leading-tight tracking-tight">
-                Talk-to-Data <span className="gradient-text">AI</span>
-              </h2>
-              <p className="text-sm text-textMuted mb-10 leading-relaxed max-w-md">
-                {hasData
-                  ? 'Your data is ready. Ask anything — from simple queries to complex analysis, chart generation, comparisons, and anomaly detection.'
-                  : hasRag
-                  ? 'Knowledge base loaded. Ask questions about your uploaded documents, audio, and images.'
-                  : 'Upload a CSV, Excel, PDF, audio, or image file from the sidebar to get started.'}
-              </p>
+        {/* ── Explorer View ── */}
+        {hasData && activeTab === 'explorer' && (
+          <div className="flex-1 overflow-y-auto px-6 py-6">
+            <DataExplorer schema={schema} uploadResult={uploadResult} />
+          </div>
+        )}
 
-              {(hasData || hasRag) && (
-                <div className="grid grid-cols-2 gap-2 w-full max-w-lg">
-                  {WELCOME_SUGGESTIONS.map(({ emoji, label, query: q }) => (
-                    <button
-                      key={q}
-                      onClick={() => handleSend(q)}
-                      disabled={isProcessing}
-                      className="suggestion-chip"
-                    >
-                      <span className="text-base mr-1">{emoji}</span> {label}
-                    </button>
+        {/* ── Chat View ── */}
+        {(activeTab === 'chat' || !hasData) && (
+          <>
+            <div
+              ref={chatContainerRef}
+              onScroll={handleScroll}
+              className="flex-1 overflow-y-auto px-6 py-6 pb-40"
+            >
+              {chatIsEmpty ? (
+                /* ── Welcome State ── */
+                <div className="flex flex-col items-center justify-center h-full max-w-xl mx-auto text-center animate-fade-in">
+                  <div className="welcome-orb mb-6 animate-orb-float">
+                    <Sparkles size={28} className="text-primary" />
+                  </div>
+                  <h2 className="font-display text-3xl font-bold text-textMain mb-3 leading-tight tracking-tight">
+                    Talk-to-Data <span className="gradient-text">AI</span>
+                  </h2>
+                  <p className="text-sm text-textMuted mb-10 leading-relaxed max-w-md">
+                    {hasData
+                      ? 'Your data is ready. Ask anything — from simple queries to complex analysis, chart generation, comparisons, and anomaly detection.'
+                      : hasRag
+                      ? 'Knowledge base loaded. Ask questions about your uploaded documents, audio, and images.'
+                      : 'Upload a CSV, Excel, PDF, audio, or image file from the sidebar to get started.'}
+                  </p>
+
+                  {(hasData || hasRag) && (
+                    <div className="grid grid-cols-2 gap-2 w-full max-w-lg">
+                      {WELCOME_SUGGESTIONS.map(({ emoji, label, query: q }) => (
+                        <button
+                          key={q}
+                          onClick={() => handleSend(q)}
+                          disabled={isProcessing}
+                          className="suggestion-chip"
+                        >
+                          <span className="text-base mr-1">{emoji}</span> {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* ── Messages ── */
+                <div className="max-w-4xl mx-auto space-y-6">
+                  {messages.map((msg, i) => (
+                    <ChatMessage
+                      key={i}
+                      message={msg}
+                      isLast={i === messages.length - 1}
+                    />
                   ))}
+                  <div ref={chatEndRef} />
                 </div>
               )}
             </div>
-          ) : (
-            /* ── Messages ── */
-            <div className="max-w-4xl mx-auto space-y-6">
-              {messages.map((msg, i) => (
-                <ChatMessage
-                  key={i}
-                  message={msg}
-                  isLast={i === messages.length - 1}
-                />
-              ))}
-              <div ref={chatEndRef} />
-            </div>
-          )}
-        </div>
 
-        {/* Scroll to Bottom Button */}
-        {showScrollBtn && (
-          <button
-            onClick={scrollToBottom}
-            className="absolute bottom-40 right-8 z-20 p-2 rounded-xl bg-surfaceHigh/80 backdrop-blur-sm
-              text-textDim hover:text-textMain hover:bg-surfaceBright/80
-              transition-all shadow-lg"
-            style={{ boxShadow: '0 8px 24px -8px rgba(6,14,32,0.5)' }}
-          >
-            <ArrowDown size={14} />
-          </button>
-        )}
+            {/* Scroll to Bottom Button */}
+            {showScrollBtn && (
+              <button
+                onClick={scrollToBottom}
+                className="absolute bottom-40 right-8 z-20 p-2 rounded-xl bg-surfaceHigh/80 backdrop-blur-sm
+                  text-textDim hover:text-textMain hover:bg-surfaceBright/80
+                  transition-all shadow-lg"
+                style={{ boxShadow: '0 8px 24px -8px rgba(6,14,32,0.5)' }}
+              >
+                <ArrowDown size={14} />
+              </button>
+            )}
 
-        {/* ── Floating Input ── */}
-        <div className="absolute bottom-0 left-0 right-0 p-5 pt-20 bg-gradient-to-t from-surfaceLow via-surfaceLow/95 to-transparent pointer-events-none z-10">
-          <div className="max-w-4xl mx-auto pointer-events-auto">
-            <div className="input-bar p-1.5 flex items-end gap-2">
-              <div className="pl-3 pb-2.5 flex items-center gap-1">
-                <MessageSquare size={14} className="text-textDim/30" />
-              </div>
-              <textarea
-                ref={inputRef}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={
-                  hasData
-                    ? "Ask anything about your data…"
-                    : hasRag
-                    ? "Ask about your documents…"
-                    : "Upload data to get started…"
-                }
-                disabled={backendStatus === 'offline'}
-                rows={1}
-                className="
-                  flex-1 bg-transparent border-0 outline-none resize-none
-                  text-textMain placeholder:text-textDim/30
-                  text-[13px] leading-relaxed py-2.5
-                  max-h-32 min-h-[36px]
-                  disabled:opacity-50
-                "
-                style={{ fieldSizing: 'content' }}
-              />
-              <div className="flex items-center gap-1.5 pb-1">
-                <button
-                  onClick={() => handleSend()}
-                  disabled={!query.trim() || isProcessing || backendStatus === 'offline'}
-                  className={`
-                    p-2.5 rounded-xl transition-all duration-200 shrink-0
-                    ${query.trim() && !isProcessing
-                      ? 'bg-primary text-onPrimary hover:bg-primaryContainer'
-                      : 'bg-surfaceHigh/50 text-textDim/30 cursor-not-allowed'
+            {/* ── Floating Input ── */}
+            <div className="absolute bottom-0 left-0 right-0 p-5 pt-20 bg-gradient-to-t from-surfaceLow via-surfaceLow/95 to-transparent pointer-events-none z-10">
+              <div className="max-w-4xl mx-auto pointer-events-auto">
+                <div className="input-bar p-1.5 flex items-end gap-2">
+                  <div className="pl-3 pb-2.5 flex items-center gap-1">
+                    <MessageSquare size={14} className="text-textDim/30" />
+                  </div>
+                  <textarea
+                    ref={inputRef}
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={
+                      hasData
+                        ? "Ask anything about your data…"
+                        : hasRag
+                        ? "Ask about your documents…"
+                        : "Upload data to get started…"
                     }
-                  `}
-                >
-                  {isProcessing ? (
-                    <div className="w-[14px] h-[14px] border-2 border-white/20 border-t-white rounded-full" style={{ animation: 'spin 0.7s linear infinite' }} />
-                  ) : (
-                    <Send size={14} strokeWidth={2.5} />
-                  )}
-                </button>
+                    disabled={backendStatus === 'offline'}
+                    rows={1}
+                    className="
+                      flex-1 bg-transparent border-0 outline-none resize-none
+                      text-textMain placeholder:text-textDim/30
+                      text-[13px] leading-relaxed py-2.5
+                      max-h-32 min-h-[36px]
+                      disabled:opacity-50
+                    "
+                    style={{ fieldSizing: 'content' }}
+                  />
+                  <div className="flex items-center gap-1.5 pb-1">
+                    <button
+                      onClick={() => handleSend()}
+                      disabled={!query.trim() || isProcessing || backendStatus === 'offline'}
+                      className={`
+                        p-2.5 rounded-xl transition-all duration-200 shrink-0
+                        ${query.trim() && !isProcessing
+                          ? 'bg-primary text-onPrimary hover:bg-primaryContainer'
+                          : 'bg-surfaceHigh/50 text-textDim/30 cursor-not-allowed'
+                        }
+                      `}
+                    >
+                      {isProcessing ? (
+                        <div className="w-[14px] h-[14px] border-2 border-white/20 border-t-white rounded-full" style={{ animation: 'spin 0.7s linear infinite' }} />
+                      ) : (
+                        <Send size={14} strokeWidth={2.5} />
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-center text-[9px] text-textDim/25 mt-2 font-medium">
+                  AI-powered analysis · Charts, summaries, anomalies, comparisons
+                </p>
               </div>
             </div>
-            <p className="text-center text-[9px] text-textDim/25 mt-2 font-medium">
-              AI-powered analysis · Charts, summaries, anomalies, comparisons
-            </p>
-          </div>
-        </div>
+          </>
+        )}
       </main>
     </div>
   );

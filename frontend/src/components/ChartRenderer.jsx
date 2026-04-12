@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ScatterChart, Scatter, ReferenceLine, Area, AreaChart, Legend,
+  Brush, Rectangle,
 } from 'recharts';
 
 /* ── Color palette: curated, not random ── */
@@ -73,6 +74,44 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
+/* ── Histogram Tooltip ── */
+function HistogramTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload;
+  if (!d) return null;
+  return (
+    <div className="custom-tooltip">
+      <p className="label">{d.range_start} – {d.range_end}</p>
+      <div className="flex items-center gap-2 mt-1">
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: '#818cf8' }} />
+        <span className="value">
+          <span style={{ color: DARK.textBright }}>Count:</span> {d.count?.toLocaleString()}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ── Heatmap Tooltip ── */
+function HeatmapTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload;
+  if (!d) return null;
+  return (
+    <div className="custom-tooltip">
+      <p className="label">{d.x} × {d.y}</p>
+      <div className="flex items-center gap-2 mt-1">
+        <span className="value">
+          <span style={{ color: DARK.textBright }}>Correlation:</span>{' '}
+          <span style={{ color: d.value > 0.5 ? '#34d399' : d.value < -0.5 ? '#f87171' : DARK.text }}>
+            {d.value?.toFixed(3)}
+          </span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /* ── Custom Pie Label ── */
 function renderPieLabel({ name, percent }) {
   if (percent < 0.03) return null;
@@ -80,13 +119,6 @@ function renderPieLabel({ name, percent }) {
 }
 
 /* ── Legend ── */
-const legendStyle = {
-  fontSize: 11,
-  fontFamily: 'Inter, sans-serif',
-  color: DARK.textBright,
-  paddingTop: 12,
-};
-
 function CustomLegend({ payload }) {
   return (
     <div className="flex flex-wrap gap-x-5 gap-y-1.5 justify-center pt-3">
@@ -101,7 +133,7 @@ function CustomLegend({ payload }) {
 }
 
 /* ── Chart Wrapper with title and optional summary ── */
-function ChartWrapper({ children, title, summary }) {
+function ChartWrapper({ children, title, summary, height }) {
   return (
     <div className="w-full animate-fade-in">
       {title && (
@@ -115,7 +147,7 @@ function ChartWrapper({ children, title, summary }) {
           )}
         </div>
       )}
-      <div className="w-full h-[320px]">
+      <div className="w-full" style={{ height: height || 320 }}>
         <ResponsiveContainer width="100%" height="100%">
           {children}
         </ResponsiveContainer>
@@ -165,12 +197,232 @@ const gridDefaults = {
   vertical: false,
 };
 
+const brushDefaults = {
+  dataKey: 'name',
+  height: 24,
+  stroke: 'rgba(129,140,248,0.3)',
+  fill: 'rgba(19,27,46,0.8)',
+  tickFormatter: () => '',
+};
+
 export default function ChartRenderer({ data, chartType, chartKeys, title }) {
   if (!data || data.length === 0) return null;
 
   const keys = chartKeys || Object.keys(data[0]).filter(
     k => k !== 'name' && k !== 'index' && k !== 'is_anomaly' && k !== 'label'
+      && k !== 'range_start' && k !== 'range_end' && k !== 'x' && k !== 'y'
+      && k !== 'outliers' && k !== 'q1' && k !== 'q3' && k !== 'median'
+      && k !== 'min' && k !== 'max' && k !== 'mean'
   );
+
+  const showBrush = data.length > 15 && !['pie', 'heatmap', 'box', 'scatter_xy', 'anomaly_scatter'].includes(chartType);
+
+  // ── Histogram ──
+  if (chartType === 'histogram') {
+    return (
+      <ChartWrapper title={title}>
+        <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+          <defs>
+            <linearGradient id="histGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#818cf8" stopOpacity={0.9} />
+              <stop offset="100%" stopColor="#818cf8" stopOpacity={0.45} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid {...gridDefaults} />
+          <XAxis {...xAxisDefaults(data)} />
+          <YAxis {...yAxisDefaults} />
+          <Tooltip content={<HistogramTooltip />} cursor={{ fill: 'rgba(129,140,248,0.04)' }} />
+          <Bar dataKey="count" fill="url(#histGrad)" radius={[3, 3, 0, 0]} maxBarSize={50} />
+          {showBrush && <Brush {...brushDefaults} />}
+        </BarChart>
+      </ChartWrapper>
+    );
+  }
+
+  // ── Box Plot (custom) ──
+  if (chartType === 'box') {
+    const d = data[0];
+    if (!d) return null;
+    const allValues = [d.min, d.q1, d.median, d.q3, d.max, ...(d.outliers || [])];
+    const boxMin = Math.min(...allValues);
+    const boxMax = Math.max(...allValues);
+    const padding = (boxMax - boxMin) * 0.1 || 1;
+
+    return (
+      <ChartWrapper title={title}>
+        <BarChart
+          data={[{
+            name: d.name,
+            bottom: d.q1,
+            box: d.q3 - d.q1,
+            median: d.median,
+            min: d.min,
+            max: d.max,
+            mean: d.mean,
+          }]}
+          margin={{ top: 20, right: 40, left: 40, bottom: 20 }}
+          layout="vertical"
+        >
+          <CartesianGrid {...gridDefaults} horizontal={false} vertical />
+          <XAxis
+            type="number"
+            domain={[boxMin - padding, boxMax + padding]}
+            stroke="none"
+            tick={{ fill: DARK.text, fontSize: 10, fontFamily: 'Inter' }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={formatNumber}
+          />
+          <YAxis
+            type="category"
+            dataKey="name"
+            stroke="none"
+            tick={{ fill: DARK.textBright, fontSize: 11, fontFamily: 'Inter' }}
+            axisLine={false}
+            tickLine={false}
+            width={60}
+          />
+          {/* IQR Box */}
+          <Bar dataKey="bottom" stackId="box" fill="transparent" barSize={32} />
+          <Bar dataKey="box" stackId="box" fill="rgba(129,140,248,0.25)" stroke="#818cf8" strokeWidth={1.5} radius={[4, 4, 4, 4]} barSize={32} />
+          {/* Whiskers and median line */}
+          <ReferenceLine x={d.median} stroke="#818cf8" strokeWidth={2.5} strokeDasharray="" label={{ value: `Median: ${formatNumber(d.median)}`, position: 'top', fill: DARK.textBright, fontSize: 10 }} />
+          <ReferenceLine x={d.min} stroke={DARK.text} strokeWidth={1} strokeDasharray="4 4" label={{ value: `Min: ${formatNumber(d.min)}`, position: 'bottom', fill: DARK.text, fontSize: 9 }} />
+          <ReferenceLine x={d.max} stroke={DARK.text} strokeWidth={1} strokeDasharray="4 4" label={{ value: `Max: ${formatNumber(d.max)}`, position: 'bottom', fill: DARK.text, fontSize: 9 }} />
+          {d.mean && (
+            <ReferenceLine x={d.mean} stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="6 3" label={{ value: `Mean: ${formatNumber(d.mean)}`, position: 'top', fill: '#f59e0b', fontSize: 9 }} />
+          )}
+          <Tooltip content={<BoxTooltip data={d} />} />
+        </BarChart>
+      </ChartWrapper>
+    );
+  }
+
+  // ── Heatmap ──
+  if (chartType === 'heatmap') {
+    const heatCols = chartKeys || [...new Set(data.map(d => d.x))];
+    const cellSize = Math.max(28, Math.min(48, 400 / heatCols.length));
+    const size = heatCols.length * cellSize + 80;
+
+    return (
+      <ChartWrapper title={title} height={Math.min(size + 60, 500)}>
+        <svg width="100%" height="100%" viewBox={`0 0 ${size + 20} ${size}`} style={{ overflow: 'visible' }}>
+          {/* Column labels (top) */}
+          {heatCols.map((col, i) => (
+            <text
+              key={`xt-${col}`}
+              x={80 + i * cellSize + cellSize / 2}
+              y={12}
+              textAnchor="end"
+              transform={`rotate(-45, ${80 + i * cellSize + cellSize / 2}, 12)`}
+              fill={DARK.text}
+              fontSize={9}
+              fontFamily="Inter"
+            >
+              {truncateLabel(col, 10)}
+            </text>
+          ))}
+          {/* Row labels (left) */}
+          {heatCols.map((col, j) => (
+            <text
+              key={`yt-${col}`}
+              x={76}
+              y={35 + j * cellSize + cellSize / 2 + 4}
+              textAnchor="end"
+              fill={DARK.text}
+              fontSize={9}
+              fontFamily="Inter"
+            >
+              {truncateLabel(col, 10)}
+            </text>
+          ))}
+          {/* Cells */}
+          {data.map((cell, idx) => {
+            const xi = heatCols.indexOf(cell.x);
+            const yi = heatCols.indexOf(cell.y);
+            if (xi === -1 || yi === -1) return null;
+            const v = cell.value;
+            const color = v > 0
+              ? `rgba(52, 211, 153, ${Math.min(Math.abs(v), 1) * 0.8 + 0.1})`
+              : v < 0
+              ? `rgba(248, 113, 113, ${Math.min(Math.abs(v), 1) * 0.8 + 0.1})`
+              : 'rgba(70,69,84,0.15)';
+
+            return (
+              <g key={idx}>
+                <rect
+                  x={80 + xi * cellSize + 1}
+                  y={35 + yi * cellSize + 1}
+                  width={cellSize - 2}
+                  height={cellSize - 2}
+                  rx={4}
+                  fill={color}
+                  style={{ transition: 'fill 0.2s' }}
+                >
+                  <title>{`${cell.x} × ${cell.y}: ${v.toFixed(3)}`}</title>
+                </rect>
+                {cellSize >= 32 && (
+                  <text
+                    x={80 + xi * cellSize + cellSize / 2}
+                    y={35 + yi * cellSize + cellSize / 2 + 4}
+                    textAnchor="middle"
+                    fill={Math.abs(v) > 0.4 ? '#fff' : DARK.text}
+                    fontSize={8}
+                    fontWeight={500}
+                    fontFamily="Inter"
+                  >
+                    {v.toFixed(2)}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      </ChartWrapper>
+    );
+  }
+
+  // ── Scatter XY ──
+  if (chartType === 'scatter_xy') {
+    const xKey = chartKeys?.[0] || 'x';
+    const yKey = chartKeys?.[1] || 'y';
+    return (
+      <ChartWrapper title={title}>
+        <ScatterChart margin={{ top: 8, right: 20, left: 0, bottom: 4 }}>
+          <CartesianGrid {...gridDefaults} vertical />
+          <XAxis
+            dataKey="x"
+            name={xKey}
+            stroke="none"
+            tick={{ fill: DARK.text, fontSize: 10, fontFamily: 'Inter' }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={formatNumber}
+            label={{ value: xKey, position: 'insideBottom', offset: -2, fill: DARK.text, fontSize: 10 }}
+          />
+          <YAxis
+            dataKey="y"
+            name={yKey}
+            {...yAxisDefaults}
+            label={{ value: yKey, angle: -90, position: 'insideLeft', offset: 10, fill: DARK.text, fontSize: 10 }}
+          />
+          <Tooltip
+            content={({ active, payload }) => {
+              if (!active || !payload?.length) return null;
+              const pt = payload[0]?.payload;
+              return (
+                <div className="custom-tooltip">
+                  <p className="label">{xKey}: {formatFullNumber(pt?.x)}</p>
+                  <p className="value" style={{ marginTop: 4 }}>{yKey}: {formatFullNumber(pt?.y)}</p>
+                </div>
+              );
+            }}
+          />
+          <Scatter data={data} fill="#818cf8" opacity={0.6} r={4} />
+        </ScatterChart>
+      </ChartWrapper>
+    );
+  }
 
   // ── Bar Chart ──
   if (chartType === 'bar') {
@@ -199,6 +451,7 @@ export default function ChartRenderer({ data, chartType, chartKeys, title }) {
               maxBarSize={42}
             />
           ))}
+          {showBrush && <Brush {...brushDefaults} />}
         </BarChart>
       </ChartWrapper>
     );
@@ -223,6 +476,7 @@ export default function ChartRenderer({ data, chartType, chartKeys, title }) {
               maxBarSize={32}
             />
           ))}
+          {showBrush && <Brush {...brushDefaults} />}
         </BarChart>
       </ChartWrapper>
     );
@@ -302,6 +556,7 @@ export default function ChartRenderer({ data, chartType, chartKeys, title }) {
               }}
             />
           ))}
+          {showBrush && <Brush {...brushDefaults} />}
         </AreaChart>
       </ChartWrapper>
     );
@@ -310,7 +565,6 @@ export default function ChartRenderer({ data, chartType, chartKeys, title }) {
   // ── Pie Chart ──
   if (chartType === 'pie') {
     const valueKey = keys[0] || 'value';
-    const total = data.reduce((s, d) => s + (Number(d[valueKey]) || 0), 0);
     return (
       <ChartWrapper title={title}>
         <PieChart>
@@ -408,7 +662,27 @@ export default function ChartRenderer({ data, chartType, chartKeys, title }) {
             maxBarSize={42}
           />
         ))}
+        {showBrush && <Brush {...brushDefaults} />}
       </BarChart>
     </ChartWrapper>
+  );
+}
+
+/* ── Box Plot Tooltip ── */
+function BoxTooltip({ data: d }) {
+  if (!d) return null;
+  return (
+    <div className="custom-tooltip">
+      <p className="label">{d.name}</p>
+      <div style={{ marginTop: 4, fontSize: 11, color: DARK.textBright }}>
+        <div>Min: {formatFullNumber(d.min)}</div>
+        <div>Q1: {formatFullNumber(d.q1)}</div>
+        <div>Median: {formatFullNumber(d.median)}</div>
+        <div>Q3: {formatFullNumber(d.q3)}</div>
+        <div>Max: {formatFullNumber(d.max)}</div>
+        {d.mean !== undefined && <div>Mean: {formatFullNumber(d.mean)}</div>}
+        {d.outliers?.length > 0 && <div style={{ color: '#f87171', marginTop: 4 }}>Outliers: {d.outliers.length}</div>}
+      </div>
+    </div>
   );
 }

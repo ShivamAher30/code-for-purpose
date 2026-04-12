@@ -111,6 +111,486 @@ class ChartRequest(BaseModel):
     chart_type: Optional[str] = None  # bar, line, pie, scatter, etc.
 
 
+class RenderChartRequest(BaseModel):
+    suggestion_id: str
+    aggregation: Optional[str] = None  # sum, mean, count, min, max
+    sort_by: Optional[str] = None  # value_asc, value_desc, label_asc, label_desc
+    filters: Optional[dict] = None  # {column: [values]}
+    chart_type_override: Optional[str] = None
+
+
+# ══════════════════════════════════════════════
+# DATASET PROFILING ENGINE
+# ══════════════════════════════════════════════
+
+def _compute_correlations(df):
+    """Compute correlation matrix for numeric columns."""
+    numeric_cols = df.select_dtypes(include="number").columns.tolist()
+    if len(numeric_cols) < 2:
+        return None, []
+    corr_matrix = df[numeric_cols].corr()
+
+    # Find strong correlations
+    strong = []
+    for i, c1 in enumerate(numeric_cols):
+        for j, c2 in enumerate(numeric_cols):
+            if j <= i:
+                continue
+            val = corr_matrix.loc[c1, c2]
+            if pd.notna(val) and abs(val) > 0.5:
+                strong.append({
+                    "col_a": c1,
+                    "col_b": c2,
+                    "correlation": round(float(val), 3),
+                    "strength": "strong" if abs(val) > 0.7 else "moderate",
+                    "direction": "positive" if val > 0 else "negative",
+                })
+    strong.sort(key=lambda x: abs(x["correlation"]), reverse=True)
+
+    # Build matrix for heatmap
+    matrix_data = []
+    for c1 in numeric_cols:
+        for c2 in numeric_cols:
+            val = corr_matrix.loc[c1, c2]
+            matrix_data.append({
+                "x": c1, "y": c2,
+                "value": round(float(val), 3) if pd.notna(val) else 0,
+            })
+
+    return {"columns": numeric_cols, "matrix": matrix_data}, strong
+
+
+def _generate_chart_suggestions(df, schema):
+    """Generate smart, dataset-specific chart suggestions."""
+    suggestions = []
+    sid = 0
+
+    numeric_cols = schema.get("numeric_columns", [])
+    categorical_cols = schema.get("categorical_columns", [])
+    date_cols = schema.get("date_columns", [])
+    col_info = schema.get("columns", {})
+
+    # ── 1. Distributions: Histograms for each numeric column ──
+    for col in numeric_cols[:6]:
+        info = col_info.get(col, {})
+        sid += 1
+        suggestions.append({
+            "id": f"hist_{sid}",
+            "chart_type": "histogram",
+            "columns": [col],
+            "label": f"Distribution of {col}",
+            "reason": f"Shows how '{col}' values are distributed (range: {info.get('min', '?')} – {info.get('max', '?')})",
+            "category": "Distributions",
+            "priority": 3,
+        })
+
+    # ── 2. Box plots for numeric columns with high variance ──
+    for col in numeric_cols[:4]:
+        col_data = df[col].dropna()
+        if len(col_data) < 10:
+            continue
+        q1, q3 = col_data.quantile(0.25), col_data.quantile(0.75)
+        iqr = q3 - q1
+        outlier_count = int(((col_data < q1 - 1.5 * iqr) | (col_data > q3 + 1.5 * iqr)).sum())
+        if outlier_count > 0 or col_data.std() > col_data.mean() * 0.5:
+            sid += 1
+            suggestions.append({
+                "id": f"box_{sid}",
+                "chart_type": "box",
+                "columns": [col],
+                "label": f"Outliers in {col}",
+                "reason": f"Detected {outlier_count} potential outliers. Box plot shows spread and outlier boundaries.",
+                "category": "Distributions",
+                "priority": 4 if outlier_count > 5 else 2,
+            })
+
+    # ── 3. Categorical × Numeric: Bar charts ──
+    for cat_col in categorical_cols[:4]:
+        n_unique = df[cat_col].nunique()
+        if n_unique < 2 or n_unique > 30:
+            continue
+        for num_col in numeric_cols[:3]:
+            sid += 1
+            suggestions.append({
+                "id": f"bar_{sid}",
+                "chart_type": "bar",
+                "columns": [cat_col, num_col],
+                "label": f"{num_col} by {cat_col}",
+                "reason": f"Compare '{num_col}' across {n_unique} categories in '{cat_col}'",
+                "category": "Comparisons",
+                "priority": 4,
+            })
+
+    # ── 4. Categorical proportions: Pie charts (small cardinality) ──
+    for cat_col in categorical_cols[:3]:
+        n_unique = df[cat_col].nunique()
+        if 2 <= n_unique <= 8:
+            sid += 1
+            suggestions.append({
+                "id": f"pie_{sid}",
+                "chart_type": "pie",
+                "columns": [cat_col],
+                "label": f"{cat_col} Breakdown",
+                "reason": f"Shows proportional share of {n_unique} categories",
+                "category": "Compositions",
+                "priority": 3,
+            })
+
+    # ── 5. Time-series: Line charts ──
+    for date_col in date_cols[:2]:
+        for num_col in numeric_cols[:3]:
+            sid += 1
+            suggestions.append({
+                "id": f"line_{sid}",
+                "chart_type": "line",
+                "columns": [date_col, num_col],
+                "label": f"{num_col} over Time",
+                "reason": f"Track trend of '{num_col}' across '{date_col}'",
+                "category": "Trends",
+                "priority": 5,
+            })
+
+    # ── 6. Scatter plots for correlated numeric pairs ──
+    _, strong_corrs = _compute_correlations(df)
+    for corr in strong_corrs[:5]:
+        sid += 1
+        suggestions.append({
+            "id": f"scatter_{sid}",
+            "chart_type": "scatter",
+            "columns": [corr["col_a"], corr["col_b"]],
+            "label": f"{corr['col_a']} vs {corr['col_b']}",
+            "reason": f"{corr['strength'].title()} {corr['direction']} correlation (r={corr['correlation']})",
+            "category": "Relationships",
+            "priority": 5 if corr["strength"] == "strong" else 3,
+        })
+
+    # ── 7. Correlation heatmap (if enough numeric cols) ──
+    if len(numeric_cols) >= 3:
+        sid += 1
+        suggestions.append({
+            "id": f"heatmap_{sid}",
+            "chart_type": "heatmap",
+            "columns": numeric_cols[:10],
+            "label": "Correlation Heatmap",
+            "reason": f"Visualize relationships between {min(len(numeric_cols), 10)} numeric columns",
+            "category": "Relationships",
+            "priority": 4,
+        })
+
+    # ── 8. Grouped bar for date + categorical ──
+    if date_cols and categorical_cols and numeric_cols:
+        sid += 1
+        suggestions.append({
+            "id": f"grouped_{sid}",
+            "chart_type": "grouped_bar",
+            "columns": [categorical_cols[0], numeric_cols[0]],
+            "label": f"{numeric_cols[0]} by {categorical_cols[0]}",
+            "reason": f"Compare '{numeric_cols[0]}' across categories with grouping",
+            "category": "Comparisons",
+            "priority": 3,
+        })
+
+    # Sort by priority descending
+    suggestions.sort(key=lambda x: x["priority"], reverse=True)
+    return suggestions
+
+
+def _generate_auto_insights(df, schema):
+    """Generate automatic insights from the dataset."""
+    insights = []
+    numeric_cols = schema.get("numeric_columns", [])
+    categorical_cols = schema.get("categorical_columns", [])
+    date_cols = schema.get("date_columns", [])
+    col_info = schema.get("columns", {})
+
+    # Missing data insights
+    total_missing = df.isnull().sum().sum()
+    total_cells = df.shape[0] * df.shape[1]
+    if total_missing > 0:
+        pct = round(total_missing / total_cells * 100, 1)
+        worst_col = df.isnull().sum().idxmax()
+        worst_pct = round(df[worst_col].isnull().sum() / len(df) * 100, 1)
+        insights.append({
+            "type": "data_quality",
+            "icon": "⚠️",
+            "text": f"{pct}% of data is missing. '{worst_col}' has the most gaps ({worst_pct}%).",
+            "severity": "warning" if pct > 10 else "info",
+        })
+
+    # Numeric insights — skewness, outliers, peaks
+    for col in numeric_cols[:5]:
+        col_data = df[col].dropna()
+        if len(col_data) < 10:
+            continue
+
+        # Skewness
+        skew = col_data.skew()
+        if abs(skew) > 1.5:
+            insights.append({
+                "type": "distribution",
+                "icon": "📊",
+                "text": f"'{col}' is highly {'right' if skew > 0 else 'left'}-skewed (skewness: {round(skew, 2)}). Consider log-transform for analysis.",
+                "severity": "info",
+                "column": col,
+            })
+
+        # Outliers
+        q1, q3 = col_data.quantile(0.25), col_data.quantile(0.75)
+        iqr = q3 - q1
+        n_outliers = int(((col_data < q1 - 1.5 * iqr) | (col_data > q3 + 1.5 * iqr)).sum())
+        if n_outliers > 0:
+            insights.append({
+                "type": "anomaly",
+                "icon": "🔴",
+                "text": f"'{col}' has {n_outliers} outliers ({round(n_outliers / len(col_data) * 100, 1)}% of values). Range: {round(float(col_data.min()), 2)} – {round(float(col_data.max()), 2)}.",
+                "severity": "warning" if n_outliers > len(col_data) * 0.05 else "info",
+                "column": col,
+            })
+
+    # Correlation insights
+    _, strong_corrs = _compute_correlations(df)
+    for corr in strong_corrs[:3]:
+        insights.append({
+            "type": "correlation",
+            "icon": "🔗",
+            "text": f"{corr['strength'].title()} {corr['direction']} correlation between '{corr['col_a']}' and '{corr['col_b']}' (r={corr['correlation']}).",
+            "severity": "info",
+            "columns": [corr["col_a"], corr["col_b"]],
+        })
+
+    # Categorical insights — dominant category
+    for col in categorical_cols[:3]:
+        vc = df[col].value_counts()
+        if len(vc) >= 2:
+            top_pct = round(vc.iloc[0] / vc.sum() * 100, 1)
+            if top_pct > 50:
+                insights.append({
+                    "type": "distribution",
+                    "icon": "📌",
+                    "text": f"'{col}' is dominated by '{vc.index[0]}' ({top_pct}% of all values).",
+                    "severity": "info",
+                    "column": col,
+                })
+
+    # Time-series insights — trend direction
+    for date_col in date_cols[:1]:
+        try:
+            df_ts = df.copy()
+            df_ts[date_col] = pd.to_datetime(df_ts[date_col], errors="coerce")
+            df_ts = df_ts.dropna(subset=[date_col]).sort_values(date_col)
+            if len(df_ts) > 10:
+                for num_col in numeric_cols[:2]:
+                    first_half = df_ts[num_col].iloc[:len(df_ts)//2].mean()
+                    second_half = df_ts[num_col].iloc[len(df_ts)//2:].mean()
+                    if first_half > 0:
+                        change = round((second_half - first_half) / first_half * 100, 1)
+                        if abs(change) > 10:
+                            direction = "increased" if change > 0 else "decreased"
+                            insights.append({
+                                "type": "trend",
+                                "icon": "📈" if change > 0 else "📉",
+                                "text": f"'{num_col}' has {direction} by {abs(change)}% from early to late records.",
+                                "severity": "info",
+                                "column": num_col,
+                            })
+        except Exception:
+            pass
+
+    # Data quality — duplicates
+    n_dup = int(df.duplicated().sum())
+    if n_dup > 0:
+        insights.append({
+            "type": "data_quality",
+            "icon": "🔄",
+            "text": f"Found {n_dup} duplicate rows ({round(n_dup / len(df) * 100, 1)}% of dataset).",
+            "severity": "warning" if n_dup > len(df) * 0.05 else "info",
+        })
+
+    return insights
+
+
+def _build_chart_data_for_suggestion(df, suggestion, aggregation="sum", sort_by=None, filters=None):
+    """Build ready-to-render chart data for a suggestion."""
+    chart_type = suggestion["chart_type"]
+    columns = suggestion["columns"]
+
+    # Apply filters
+    filtered_df = df.copy()
+    if filters:
+        for col, vals in filters.items():
+            if col in filtered_df.columns and vals:
+                filtered_df = filtered_df[filtered_df[col].isin(vals)]
+
+    agg_func = aggregation or "sum"
+
+    try:
+        # ── Histogram ──
+        if chart_type == "histogram":
+            col = columns[0]
+            col_data = filtered_df[col].dropna()
+            n_bins = min(30, max(10, int(len(col_data) ** 0.5)))
+            counts, bin_edges = np.histogram(col_data, bins=n_bins)
+            chart_data = []
+            for i in range(len(counts)):
+                chart_data.append({
+                    "name": f"{round(bin_edges[i], 2)}",
+                    "range_start": round(float(bin_edges[i]), 2),
+                    "range_end": round(float(bin_edges[i+1]), 2),
+                    "count": int(counts[i]),
+                })
+            return chart_data, "histogram", None
+
+        # ── Box Plot ──
+        elif chart_type == "box":
+            col = columns[0]
+            col_data = filtered_df[col].dropna()
+            q1 = float(col_data.quantile(0.25))
+            median = float(col_data.median())
+            q3 = float(col_data.quantile(0.75))
+            iqr = q3 - q1
+            whisker_low = float(col_data[col_data >= q1 - 1.5 * iqr].min())
+            whisker_high = float(col_data[col_data <= q3 + 1.5 * iqr].max())
+            outliers = col_data[(col_data < q1 - 1.5 * iqr) | (col_data > q3 + 1.5 * iqr)].tolist()
+            chart_data = [{
+                "name": col,
+                "min": round(whisker_low, 2),
+                "q1": round(q1, 2),
+                "median": round(median, 2),
+                "q3": round(q3, 2),
+                "max": round(whisker_high, 2),
+                "outliers": [round(float(o), 2) for o in outliers[:50]],
+                "mean": round(float(col_data.mean()), 2),
+            }]
+            return chart_data, "box", None
+
+        # ── Bar Chart (categorical × numeric) ──
+        elif chart_type in ("bar", "grouped_bar"):
+            cat_col, num_col = columns[0], columns[1]
+            grouped = filtered_df.groupby(cat_col, dropna=True)[num_col].agg(agg_func).reset_index()
+            grouped.columns = ["name", "value"]
+            if sort_by == "value_desc":
+                grouped = grouped.sort_values("value", ascending=False)
+            elif sort_by == "value_asc":
+                grouped = grouped.sort_values("value", ascending=True)
+            elif sort_by == "label_asc":
+                grouped = grouped.sort_values("name", ascending=True)
+            elif sort_by == "label_desc":
+                grouped = grouped.sort_values("name", ascending=False)
+            else:
+                grouped = grouped.sort_values("value", ascending=False)
+            grouped = grouped.head(25)
+            grouped["name"] = grouped["name"].astype(str)
+            grouped["value"] = grouped["value"].apply(lambda x: round(float(x), 2) if pd.notna(x) else 0)
+            return grouped.to_dict("records"), "bar", None
+
+        # ── Pie Chart ──
+        elif chart_type == "pie":
+            cat_col = columns[0]
+            if len(columns) > 1:
+                num_col = columns[1]
+                grouped = filtered_df.groupby(cat_col, dropna=True)[num_col].agg(agg_func).reset_index()
+                grouped.columns = ["name", "value"]
+            else:
+                grouped = filtered_df[cat_col].value_counts().reset_index()
+                grouped.columns = ["name", "value"]
+            grouped = grouped.head(10)
+            grouped["name"] = grouped["name"].astype(str)
+            grouped["value"] = grouped["value"].apply(lambda x: round(float(x), 2) if pd.notna(x) else 0)
+            return grouped.to_dict("records"), "pie", None
+
+        # ── Line Chart (time-series) ──
+        elif chart_type == "line":
+            date_col, num_col = columns[0], columns[1]
+            ts_df = filtered_df.copy()
+            ts_df[date_col] = pd.to_datetime(ts_df[date_col], errors="coerce")
+            ts_df = ts_df.dropna(subset=[date_col]).sort_values(date_col)
+            # Auto-resample if too many points
+            if len(ts_df) > 100:
+                ts_df = ts_df.set_index(date_col).resample("W")[num_col].agg(agg_func).reset_index()
+                ts_df.columns = [date_col, num_col]
+            chart_data = []
+            for _, row in ts_df.iterrows():
+                chart_data.append({
+                    "name": str(row[date_col].date()) if hasattr(row[date_col], 'date') else str(row[date_col]),
+                    "value": round(float(row[num_col]), 2) if pd.notna(row[num_col]) else 0,
+                })
+            return chart_data, "line", None
+
+        # ── Scatter Plot ──
+        elif chart_type == "scatter":
+            col_a, col_b = columns[0], columns[1]
+            scatter_df = filtered_df[[col_a, col_b]].dropna()
+            if len(scatter_df) > 500:
+                scatter_df = scatter_df.sample(500, random_state=42)
+            chart_data = []
+            for _, row in scatter_df.iterrows():
+                chart_data.append({
+                    "x": round(float(row[col_a]), 2),
+                    "y": round(float(row[col_b]), 2),
+                })
+            return chart_data, "scatter_xy", [col_a, col_b]
+
+        # ── Heatmap ──
+        elif chart_type == "heatmap":
+            corr_data, _ = _compute_correlations(filtered_df)
+            if corr_data:
+                return corr_data["matrix"], "heatmap", corr_data["columns"]
+            return None, None, None
+
+    except Exception as e:
+        return None, None, None
+
+    return None, None, None
+
+
+def _profile_dataset(df, schema):
+    """Full dataset profile with suggestions and insights."""
+    suggestions = _generate_chart_suggestions(df, schema)
+    insights = _generate_auto_insights(df, schema)
+    corr_data, strong_corrs = _compute_correlations(df)
+
+    # Data quality score (0-100)
+    total_cells = df.shape[0] * df.shape[1]
+    missing_pct = df.isnull().sum().sum() / total_cells * 100 if total_cells > 0 else 0
+    dup_pct = df.duplicated().sum() / len(df) * 100 if len(df) > 0 else 0
+    quality_score = max(0, round(100 - missing_pct * 2 - dup_pct, 1))
+
+    # Pre-render first 3 suggestions
+    pre_rendered = {}
+    for s in suggestions[:3]:
+        chart_data, chart_type, chart_keys = _build_chart_data_for_suggestion(df, s)
+        if chart_data:
+            pre_rendered[s["id"]] = {
+                "chart_data": chart_data,
+                "chart_type": chart_type,
+                "chart_keys": chart_keys,
+            }
+
+    # Column filter options for categorical columns
+    filter_options = {}
+    for col in schema.get("categorical_columns", [])[:10]:
+        vc = df[col].value_counts().head(50)
+        filter_options[col] = [str(v) for v in vc.index.tolist()]
+
+    return {
+        "suggestions": suggestions,
+        "insights": insights,
+        "correlations": strong_corrs,
+        "quality_score": quality_score,
+        "pre_rendered": pre_rendered,
+        "filter_options": filter_options,
+        "summary": {
+            "rows": len(df),
+            "columns": len(df.columns),
+            "numeric_count": len(schema.get("numeric_columns", [])),
+            "categorical_count": len(schema.get("categorical_columns", [])),
+            "date_count": len(schema.get("date_columns", [])),
+            "missing_pct": round(missing_pct, 1),
+            "duplicate_count": int(df.duplicated().sum()),
+        },
+    }
+
+
 # ── Helper: DataFrame to chart-friendly JSON ──
 def _df_to_chart_data(result_data, query_hint=""):
     """Convert pandas result to JSON-friendly chart data for Recharts."""
@@ -275,6 +755,59 @@ def get_schema():
         "has_data": True,
         "schema": _build_schema_response(),
         "preview": state["df"].head(5).astype(str).to_dict("records"),
+    }
+
+
+@app.get("/api/dataset-profile")
+def dataset_profile():
+    """Profile current dataset — returns smart chart suggestions, insights, correlations."""
+    if state["df"] is None:
+        raise HTTPException(400, "No data uploaded.")
+    if state["schema"] is None:
+        state["schema"] = auto_detect_schema(state["df"])
+
+    profile = _profile_dataset(state["df"], state["schema"])
+    return profile
+
+
+@app.post("/api/render-chart")
+def render_chart(req: RenderChartRequest):
+    """Render a specific suggested chart with optional customization."""
+    if state["df"] is None:
+        raise HTTPException(400, "No data uploaded.")
+    if state["schema"] is None:
+        state["schema"] = auto_detect_schema(state["df"])
+
+    # Find the suggestion by ID
+    suggestions = _generate_chart_suggestions(state["df"], state["schema"])
+    suggestion = None
+    for s in suggestions:
+        if s["id"] == req.suggestion_id:
+            suggestion = s
+            break
+
+    if not suggestion:
+        raise HTTPException(404, f"Suggestion '{req.suggestion_id}' not found.")
+
+    # Override chart type if requested
+    if req.chart_type_override:
+        suggestion = {**suggestion, "chart_type": req.chart_type_override}
+
+    chart_data, chart_type, chart_keys = _build_chart_data_for_suggestion(
+        state["df"], suggestion,
+        aggregation=req.aggregation,
+        sort_by=req.sort_by,
+        filters=req.filters,
+    )
+
+    if chart_data is None:
+        raise HTTPException(500, "Could not render chart for this suggestion.")
+
+    return {
+        "chart_data": chart_data,
+        "chart_type": chart_type,
+        "chart_keys": chart_keys,
+        "suggestion": suggestion,
     }
 
 
