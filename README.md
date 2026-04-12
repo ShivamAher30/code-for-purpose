@@ -245,6 +245,10 @@ The application follows a decoupled client-server architecture with a React sing
 
 ## System Architecture Diagram
 
+<p align="center">
+  <img src="https://github.com/ShivamAher30/GIF-DUMP/blob/main/image.png?raw=true" alt="Talk-to-Data Architecture Flowchart" width="800" />
+</p>
+
 ```
 User Query
     |
