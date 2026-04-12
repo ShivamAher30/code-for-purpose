@@ -178,13 +178,15 @@ export async function exportCSV() {
   URL.revokeObjectURL(url);
 }
 
-export async function exportPDF(query = '', responseText = '') {
-  const formData = new FormData();
-  formData.append('query', query);
-  formData.append('response_text', responseText);
+export async function exportPDF(query = '', responseText = '', chatHistory = []) {
   const res = await fetch(`${API_BASE}/api/export/pdf`, {
     method: 'POST',
-    body: formData,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query,
+      response_text: responseText,
+      chat_history: chatHistory,
+    }),
   });
   if (!res.ok) throw new Error('PDF export failed');
   const blob = await res.blob();

@@ -45,9 +45,9 @@ def _save_chart_to_image(fig):
     return tmp.name
 
 
-def export_to_pdf(title, query, response_text, chart_fig=None, dataframe=None, trust_info=None):
+def export_to_pdf(title, query, response_text, chart_fig=None, dataframe=None, trust_info=None, chat_history=None):
     """
-    Generate a PDF report with the query, response, chart, and data table.
+    Generate a PDF report with the chat history or single query/response, chart, and data table.
     Returns PDF bytes.
     """
     if not REPORTLAB_AVAILABLE:
@@ -80,8 +80,17 @@ def export_to_pdf(title, query, response_text, chart_fig=None, dataframe=None, t
         spaceAfter=8,
         fontName="Helvetica-Bold",
     )
-    body_style = ParagraphStyle(
-        "CustomBody",
+    user_style = ParagraphStyle(
+        "UserStyle",
+        parent=styles["Normal"],
+        fontSize=11,
+        textColor=colors.HexColor("#333333"),
+        spaceAfter=10,
+        leading=16,
+        fontName="Helvetica-Bold",
+    )
+    ai_style = ParagraphStyle(
+        "AIStyle",
         parent=styles["Normal"],
         fontSize=11,
         textColor=colors.HexColor("#333333"),
@@ -109,20 +118,94 @@ def export_to_pdf(title, query, response_text, chart_fig=None, dataframe=None, t
         color=colors.HexColor("#6C63FF"), spaceAfter=20
     ))
 
-    # User Query
-    if query:
-        elements.append(Paragraph("User Query", heading_style))
-        elements.append(Paragraph(f'"{query}"', body_style))
-
-    # AI Response
-    if response_text:
-        elements.append(Paragraph("AI Response", heading_style))
-        # Split long responses into paragraphs
-        for para in response_text.split("\n"):
-            if para.strip():
-                elements.append(Paragraph(para.strip(), body_style))
-
+    # Conversation History
+    elements.append(Paragraph("Conversation History", heading_style))
+    
     tmp_files_to_clean = []
+
+    if chat_history and len(chat_history) > 0:
+        for msg in chat_history:
+            role_label = "User:" if msg.get("role") == "user" else "AI:"
+            style = user_style if msg.get("role") == "user" else ai_style
+            text = msg.get("content", "")
+            
+            # For AI responses, they might have multiple paragraphs
+            if msg.get("role") == "user":
+                elements.append(Paragraph(f'<b>{role_label}</b> "{text}"', style))
+            else:
+                elements.append(Paragraph(f"<b>{role_label}</b>", user_style))
+                for para in text.split("\n"):
+                    if para.strip():
+                        elements.append(Paragraph(para.strip(), style))
+                
+                # Render chart_data if present
+                chart_data = msg.get("chart_data")
+                if chart_data and isinstance(chart_data, list) and len(chart_data) > 0:
+                    try:
+                        import matplotlib.pyplot as plt
+                        from visualize import _apply_dark_theme, COLORS
+                        df_c = pd.DataFrame(chart_data)
+                        if not df_c.empty:
+                            fig, ax = plt.subplots(figsize=(6, 4))
+                            ctype = msg.get("chart_type", "").lower()
+                            title = msg.get("chart_keys", ["Value"])[0] if msg.get("chart_keys") else "Chart"
+                            
+                            cols = df_c.columns
+                            x_col = cols[0]
+                            
+                            if "anomaly" in ctype or ctype == "scatter":
+                                # Anomaly or scatter plot
+                                x_vals = df_c["index"] if "index" in cols else df_c[cols[0]]
+                                y_vals = df_c["value"] if "value" in cols else df_c[cols[1]]
+                                ax.scatter(x_vals, y_vals, color=COLORS[1], alpha=0.6)
+                                if "is_anomaly" in cols:
+                                    anomalies = df_c[df_c["is_anomaly"] == True]
+                                    if not anomalies.empty:
+                                        a_x = anomalies["index"] if "index" in anomalies else anomalies[cols[0]]
+                                        a_y = anomalies["value"] if "value" in anomalies else anomalies[cols[1]]
+                                        ax.scatter(a_x, a_y, color="#E94560", label="Anomaly", zorder=5)
+                                        ax.legend(facecolor="#1e1e2d", edgecolor="#333", labelcolor="white")
+                            elif ctype == "pie":
+                                y_col = "value" if "value" in cols else cols[1]
+                                ax.pie(df_c[y_col], labels=df_c[x_col], autopct="%1.1f%%", colors=COLORS)
+                            elif ctype == "line":
+                                y_col = "value" if "value" in cols else cols[1]
+                                ax.plot(df_c[x_col].astype(str).head(15), df_c[y_col].head(15), marker='o', color=COLORS[2])
+                            else:
+                                # Default bar
+                                y_col = "value" if "value" in cols else cols[1]
+                                ax.bar(df_c[x_col].astype(str).head(15), df_c[y_col].head(15), color=COLORS[0])
+                            
+                            ax.set_title(title.title(), color="white", fontsize=11)
+                            _apply_dark_theme(fig, ax)
+                            plt.tight_layout(pad=2.0)
+                            
+                            c_path = _save_chart_to_image(fig)
+                            plt.close(fig)
+                            
+                            if c_path:
+                                tmp_files_to_clean.append(c_path)
+                                elements.append(Spacer(1, 10))
+                                try:
+                                    elements.append(RLImage(c_path, width=4.5 * inch, height=3.0 * inch))
+                                except Exception:
+                                    pass
+                    except Exception as e:
+                        print("Failed to plot chart inline:", e)
+                        
+            elements.append(Spacer(1, 10))
+    else:
+        # Fallback to single interaction
+        if query:
+            elements.append(Paragraph(f'<b>User:</b> "{query}"', user_style))
+            elements.append(Spacer(1, 5))
+
+        if response_text:
+            elements.append(Paragraph("<b>AI:</b>", user_style))
+            for para in response_text.split("\n"):
+                if para.strip():
+                    elements.append(Paragraph(para.strip(), ai_style))
+            elements.append(Spacer(1, 5))
 
     # Chart
     if chart_fig:
@@ -181,7 +264,7 @@ def export_to_pdf(title, query, response_text, chart_fig=None, dataframe=None, t
         elements.append(Spacer(1, 15))
         elements.append(Paragraph("Transparency Details", heading_style))
         if trust_info.get("pandas_code"):
-            elements.append(Paragraph("Generated Code:", body_style))
+            elements.append(Paragraph("Generated Code:", ai_style))
             code_style = ParagraphStyle(
                 "Code", parent=styles["Code"],
                 fontSize=8, backColor=colors.HexColor("#F0F0F0"),
@@ -189,7 +272,7 @@ def export_to_pdf(title, query, response_text, chart_fig=None, dataframe=None, t
             )
             elements.append(Paragraph(trust_info["pandas_code"], code_style))
         if trust_info.get("explanation"):
-            elements.append(Paragraph(f"Explanation: {trust_info['explanation']}", body_style))
+            elements.append(Paragraph(f"Explanation: {trust_info['explanation']}", ai_style))
 
     # Footer
     elements.append(Spacer(1, 30))

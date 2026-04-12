@@ -119,6 +119,12 @@ class RenderChartRequest(BaseModel):
     chart_type_override: Optional[str] = None
 
 
+class PDFExportRequest(BaseModel):
+    query: str = ""
+    response_text: str = ""
+    chat_history: Optional[List[dict]] = None
+
+
 # ══════════════════════════════════════════════
 # DATASET PROFILING ENGINE
 # ══════════════════════════════════════════════
@@ -1076,7 +1082,13 @@ async def process_query(req: QueryRequest):
 
     # Add to message history
     state["messages"].append({"role": "user", "content": query})
-    state["messages"].append({"role": "assistant", "content": result["response"]})
+    state["messages"].append({
+        "role": "assistant", 
+        "content": result.get("response", ""),
+        "chart_data": result.get("chart_data"),
+        "chart_type": result.get("chart_type"),
+        "chart_keys": result.get("chart_keys")
+    })
 
     return result
 
@@ -1088,10 +1100,13 @@ def quick_action(req: QuickActionRequest):
     if df is None:
         raise HTTPException(400, "No data uploaded.")
 
+    user_query = f"Quick Action: {req.action.title()}"
+    result = {}
+
     if req.action == "summary":
         summary = generate_data_summary(df)
         narrative = narrate_summary("Give me a summary of this data", summary)
-        return {
+        result = {
             "response": narrative,
             "intent": "summary",
             "trust_layer": {"intent": "summary", "analysis_data": summary},
@@ -1115,7 +1130,7 @@ def quick_action(req: QuickActionRequest):
                 chart_data.append(entry)
             chart_type = "anomaly_scatter"
             bounds = {"upper": info["upper_bound"], "lower": info["lower_bound"], "column": first_col}
-        return {
+        result = {
             "response": narrative,
             "intent": "anomaly",
             "chart_data": chart_data,
@@ -1125,13 +1140,24 @@ def quick_action(req: QuickActionRequest):
 
     elif req.action == "insights":
         insights = generate_insights(df)
-        return {
+        result = {
             "response": insights,
             "intent": "insights",
             "trust_layer": {"intent": "structured"},
         }
+    else:
+        raise HTTPException(400, f"Unknown action: {req.action}")
 
-    raise HTTPException(400, f"Unknown action: {req.action}")
+    # Append to history
+    state["messages"].append({"role": "user", "content": user_query})
+    state["messages"].append({
+        "role": "assistant",
+        "content": result.get("response", ""),
+        "chart_data": result.get("chart_data"),
+        "chart_type": result.get("chart_type")
+    })
+    
+    return result
 
 
 @app.post("/api/export/csv")
@@ -1443,6 +1469,16 @@ async def generate_chart(req: ChartRequest):
         # Generate explanation
         explanation = generate_answer_from_pandas(query, df_result)
 
+        # Append to history so it appears in PDF export
+        state["messages"].append({"role": "user", "content": query})
+        state["messages"].append({
+            "role": "assistant",
+            "content": explanation,
+            "chart_data": chart_data,
+            "chart_type": chart_type,
+            "chart_keys": chart_keys
+        })
+
         return {
             "success": True,
             "chart_data": chart_data,
@@ -1457,13 +1493,16 @@ async def generate_chart(req: ChartRequest):
 
 
 @app.post("/api/export/pdf")
-async def export_pdf_endpoint(query: str = Form(""), response_text: str = Form("")):
-    """Export a query result as a PDF report."""
+async def export_pdf_endpoint(req: PDFExportRequest):
+    """Export the full chat history as a PDF report."""
+    # Use client-sent chat_history (authoritative), fall back to server state
+    chat_history = req.chat_history if req.chat_history else state.get("messages", [])
     pdf_bytes = export_to_pdf(
         title="Talk-to-Data Report",
-        query=query,
-        response_text=response_text,
+        query=req.query,
+        response_text=req.response_text,
         dataframe=state["df"],
+        chat_history=chat_history,
     )
     if pdf_bytes is None:
         raise HTTPException(500, "PDF generation failed. reportlab may not be installed.")

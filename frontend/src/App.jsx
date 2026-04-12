@@ -299,9 +299,19 @@ export default function App() {
 
   const handleExportPDF = useCallback(async () => {
     try {
+      // Send the full chat history (including chart data) to the backend
+      const chatHistory = messages
+        .filter(m => !m.loading)
+        .map(m => ({
+          role: m.role,
+          content: m.content || '',
+          chart_data: m.chart_data || null,
+          chart_type: m.chart_type || null,
+          chart_keys: m.chart_keys || null,
+        }));
       const lastQuery = messages.filter(m => m.role === 'user').pop()?.content || '';
       const lastResponse = messages.filter(m => m.role === 'assistant' && !m.loading).pop()?.content || '';
-      await exportPDF(lastQuery, lastResponse);
+      await exportPDF(lastQuery, lastResponse, chatHistory);
     } catch (err) {
       alert('PDF export failed: ' + err.message);
     }
